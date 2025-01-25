@@ -86,4 +86,4 @@ _darcs/
 
 # Project specific
 .cache/
-error_assist_env/
+shellsage_env/
