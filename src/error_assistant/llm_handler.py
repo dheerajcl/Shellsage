@@ -12,33 +12,45 @@ class DeepSeekLLMHandler:
             base_url="https://api.hyperbolic.xyz/v1"
         )
 
-    def get_error_solution(self, error_output):
+    def get_error_solution(self, error_context):
         try:
-            chat_completion = self.client.chat.completions.create(
-                model="Qwen/Qwen2.5-Coder-32B-Instruct",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are a UNIX terminal expert. For command errors:
-                    1. Identify if it's a typo, missing package, or execution error
-                    2. For typos: suggest correct command
-                    3. For missing packages: suggest install command
-                    4. Format response as:
-                    Cause: [1-sentence cause]
-                    Explanation: [technical details]
-                    Command: `[correct command]`
-                    Prevention: [prevention tip]"""
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Error output:\n{error_output}"
-                    }
-                ],
-                temperature=0.2,
-                max_tokens=200
-            )
+            response = self.client.chat.completions.create(
+                model="meta-llama/Llama-3.3-70B-Instruct",
+                messages=[{
+                    "role": "system",
+                    "content": f"""Analyze terminal errors with MANDATORY format:
 
-            return chat_completion.choices[0].message.content
+**Command**: {error_context['command']}
+**Error**: {error_context['error_output']}
+**CWD**: {error_context['cwd']}
+**Exit Code**: {error_context['exit_code']}
+
+Response MUST contain:
+1. 🔍 Cause: <1-line diagnosis>
+2. 🛠️ Fix: `[executable command]`
+3. 📚 Explanation: <technical reason>
+4. 🔒 Prevention: <actionable tip>
+
+Examples:
+For 'fastfetc' typo:
+🔍 Cause: Typo in command name
+🛠️ Fix: `fastfetch`
+📚 Explanation: 'fastfetc' not found, correct command is 'fastfetch'
+🔒 Prevention: Use 'apt list fastfetch' to verify installation
+
+For permission denied:
+🔍 Cause: Missing execute permissions
+🛠️ Fix: `chmod +x script.sh`
+📚 Explanation: File lacks executable permission (mode 755 required)
+🔒 Prevention: Always check permissions with 'ls -l'"""
+                }, {
+                    "role": "user",
+                    "content": "Provide analysis for this error:"
+                }],
+                temperature=0.0,
+                max_tokens=500
+            )
+            return response.choices[0].message.content
         
         except Exception as e:
-            return f"API Error: {str(e)}"
+            return f"Error analysis failed: {str(e)}"

@@ -3,115 +3,134 @@ import sys
 import shlex
 import os
 import re
-from .llm_handler import DeepSeekLLMHandler
 import click
+from .llm_handler import DeepSeekLLMHandler
 
 class ErrorInterceptor:
     def __init__(self):
         self.llm_handler = DeepSeekLLMHandler()
-    
+        self.last_command = ""
+
     def run_command(self, command):
         try:
-            # Normalize command input
-            if isinstance(command, str):
-                cmd_str = command
-                cmd_parts = shlex.split(command)
-            else:
-                cmd_str = ' '.join(command)
-                cmd_parts = command
-            
-            # Execute command through shell to get native errors
+            self.last_command = ' '.join(command)
+            # Increase buffer size for large outputs
             result = subprocess.run(
-                cmd_str,
+                self.last_command,
                 shell=True,
                 capture_output=True,
                 text=True,
-                check=False
+                bufsize=1024 * 1024  # 1MB buffer
             )
             
-            # Successful command execution
-            if result.returncode == 0:
-                print(result.stdout)
-                return result
+            if result.returncode != 0:
+                self._handle_error(result)
             
-            # Show original error exactly as terminal would
-            print(f"\n\033[91mCOMMAND ERROR:\033[0m")
-            print(result.stderr.strip() or f"Command failed with exit code {result.returncode}")
-            
-            # Display error detection
-            print("\n\033[91m🔴 ERROR DETECTED 🔴\033[0m")
-            print(f"Command: {cmd_str}")
-            print(f"Exit Code: {result.returncode}")
-            
-            # Get structured solution
-            solution = self.llm_handler.get_error_solution(result.stderr)
-            return self._process_solution(solution, cmd_parts)
+            sys.exit(result.returncode)
             
         except Exception as e:
             print(f"\n\033[91mExecution Error: {e}\033[0m")
-            return None
+            sys.exit(1)
 
-    def _process_solution(self, solution, cmd_parts):
-        """Common solution processing logic"""
-        # Parse solution components
-        solution_data = {
-            'cause': self._extract_section(solution, 'Cause'),
-            'explanation': self._extract_section(solution, 'Explanation'),
-            'command': self._extract_section(solution, 'Command'),
-            'prevention': self._extract_section(solution, 'Prevention')
+    def auto_analyze(self, command, exit_code):
+        result = subprocess.CompletedProcess(
+            args=command,
+            returncode=exit_code,
+            stdout='',
+            stderr=self._get_native_error(command)
+        )
+        self._handle_error(result)
+
+    def _handle_error(self, result):
+        # Get git status if it's a git command
+        git_context = ''
+        if self.last_command.startswith('git '):
+            try:
+                git_status = subprocess.run(
+                    'git status --porcelain',
+                    shell=True,
+                    capture_output=True,
+                    text=True
+                )
+                git_context = f"\nGit Status:\n{git_status.stdout}"
+            except:
+                pass
+            
+        error_context = {
+            'command': self.last_command,
+            'error_output': (result.stderr + '\n' + result.stdout).strip() if result.stdout else result.stderr,
+            'cwd': os.getcwd(),
+            'exit_code': result.returncode,
+            'additional_context': git_context
+        }
+        
+        print("\n\033[90m🔎 Analyzing error...\033[0m")
+        solution = self.llm_handler.get_error_solution(error_context)
+        self._show_analysis(solution)
+
+    def _show_analysis(self, solution):
+        components = {
+            'cause': re.search(r'🔍 Cause: (.+)', solution),
+            'fix': re.search(r'🛠️ Fix: `(.+?)`', solution),
+            'explanation': re.search(r'📚 Explanation: (.+)', solution),
+            'prevention': re.search(r'🔒 Prevention: (.+)', solution)
         }
 
-        # Display analysis
-        print("\n\033[93m📖 Error Analysis:\033[0m")
-        print(f"\033[91mCause:\033[0m {solution_data.get('cause', 'Unknown')}")
-        print(f"\033[94mTechnical Note:\033[0m {solution_data.get('explanation', '')}")
-        
-        if solution_data.get('prevention'):
-            print(f"\n\033[96m🔒 Prevention Tip:\033[0m {solution_data.get('prevention')}")
+        print("\n\033[94m=== ERROR ANALYSIS ===\033[0m")
+        self._print_component(components['cause'], '\033[91m')
+        self._print_component(components['explanation'], '\033[93m')
+        self._print_component(components['prevention'], '\033[92m')
 
-        # Handle command suggestion
-        corrective_command = solution_data.get('command')
-        
-        if corrective_command:
-            # Clean command from formatting
-            corrective_command = corrective_command.strip('`').strip()
-            if click.confirm(f"\n\033[92m🚀 Suggested fix: {corrective_command}\nRun this command? (Y/n)\033[0m"):
-                self._execute_corrective_command(corrective_command)
-        else:
-            print("\n\033[93m⚠️  Additional suggestions:\033[0m")
-            print(solution)
+        if components['fix']:
+            self._prompt_fix(components['fix'].group(1))
 
-    def _extract_section(self, solution, section_name):
-        """Extract specific section from structured response"""
-        match = re.search(fr"{section_name}:\s*(.+?)(?=\n\w+:|$)", solution, re.DOTALL)
-        return match.group(1).strip() if match else None
+    def _print_component(self, match, color):
+        if match:
+            print(f"{color}{match.group(0)}\033[0m")
 
-    def _execute_corrective_command(self, command):
-        """Execute the corrective command and show results"""
+    def _prompt_fix(self, command):
+        if click.confirm(f"\n\033[95m🚀 Run fix command: {command}? (Y/n)\033[0m"):
+            self._execute_command(command)
+
+    def _execute_command(self, command):
         try:
             result = subprocess.run(
                 command,
                 shell=True,
                 capture_output=True,
-                text=True,
-                check=True
+                text=True
             )
-            print(f"\n\033[92m✅ Command executed successfully:\033[0m")
-            print(result.stdout)
-        except subprocess.CalledProcessError as e:
-            print(f"\n\033[91m❌ Corrective command failed:\033[0m")
-            print(e.stderr)
+            print("\n\033[92m=== COMMAND OUTPUT ===\033[0m")
+            print(result.stdout if result.stdout else "(No output)")
+            if result.stderr:
+                print(f"\n\033[91m=== ERRORS ===\033[0m\n{result.stderr}")
+                
         except Exception as e:
-            print(f"\n\033[91m⚠️  Unexpected error: {str(e)}\033[0m")
+            print(f"\n\033[91mEXECUTION FAILED: {str(e)}\033[0m")
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: error-assist <shell_command>")
-        sys.exit(1)
-    
-    command = sys.argv[1:]
-    interceptor = ErrorInterceptor()
-    interceptor.run_command(command)
+    def _get_native_error(self, command):
+        try:
+            # Special handling for git commands
+            if command.startswith('git '):
+                # Get both stderr and stdout for git commands as git uses both
+                result = subprocess.run(
+                    command,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    env={'LANG': 'en_US.UTF-8', 'GIT_TERMINAL_PROMPT': '0'}
+                )
+                # Combine stdout and stderr for git commands as git uses both
+                error_output = result.stdout + '\n' + result.stderr if result.stdout else result.stderr
+                return error_output.strip()
 
-if __name__ == "__main__":
-    main()
+            # Normal command handling
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+            return result.stderr.strip()
+        except Exception:
+            return "Command execution failed"
