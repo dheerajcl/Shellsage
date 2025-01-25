@@ -47,8 +47,8 @@ For permission denied:
                     "role": "user",
                     "content": "Provide analysis for this error:"
                 }],
-                temperature=0.0,
-                max_tokens=500
+                temperature=0.1,
+                max_tokens=512
             )
             return response.choices[0].message.content
         

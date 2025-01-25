@@ -66,7 +66,12 @@ class ErrorInterceptor:
         
         print("\n\033[90m🔎 Analyzing error...\033[0m")
         solution = self.llm_handler.get_error_solution(error_context)
-        self._show_analysis(solution)
+
+        if solution:
+            self._show_analysis(solution)
+        else:
+            print("\n\033[91mError: Could not get analysis. Please check your API key and connection.\033[0m")
+        
 
     def _show_analysis(self, solution):
         components = {
