@@ -1,6 +1,3 @@
-Here's the complete raw markdown for the README.md:
-
-```markdown
 # Shell Sage 🐚✨
 
 **Intelligent Terminal Companion | Error Analysis & Command Generation**  
@@ -32,8 +29,8 @@ shellsage ask "compress all .log files older than 7 days"
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/shell-sage
-cd shell-sage
+https://github.com/dheerajcl/Terminal_assistant.git
+cd Terminal_assistant
 
 #Install dependencies:
 ./install.sh
@@ -63,6 +60,7 @@ shellsage ask "set up python virtual environment"
 ## Development Status 🚧
 
 Shell Sage is currently in **alpha development**.  
+
 **Known Limitations**:
 - Limited Windows support
 - API dependency for AI features
@@ -92,4 +90,3 @@ We welcome contributions! Please follow these steps:
 > **Note**: This project is not affiliated with any API providers.  
 > Requires internet connection for AI features.  
 > Use at your own risk with critical operations.
-```
