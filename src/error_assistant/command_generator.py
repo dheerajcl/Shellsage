@@ -5,16 +5,16 @@ from openai import OpenAI
 
 class CommandGenerator:
     def __init__(self, api_key=None):
-        self.api_key = api_key or os.getenv('HYPERBOLIC_API_KEY')
+        self.api_key = api_key or os.getenv('GROQ_API_KEY')
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url="https://api.hyperbolic.xyz/v1"
+            base_url="https://api.groq.com/openai/v1"
         )
     
     def generate_commands(self, query, context=None):
         try:
             response = self.client.chat.completions.create(
-                model="meta-llama/Llama-3.3-70B-Instruct",
+                model="llama-3.1-8b-instant",
                 messages=[{
                     "role": "system",
                     "content": f"""Generate terminal commands for user queries. Follow these rules:

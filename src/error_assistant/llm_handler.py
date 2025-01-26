@@ -3,19 +3,19 @@ from openai import OpenAI
 
 class DeepSeekLLMHandler:
     def __init__(self, api_key=None):
-        self.api_key = api_key or os.getenv('HYPERBOLIC_API_KEY')
+        self.api_key = api_key or os.getenv('GROQ_API_KEY')
         if not self.api_key:
-            raise ValueError("HYPERBOLIC_API_KEY environment variable required")
+            raise ValueError("GROQ_API_KEY environment variable required")
         
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url="https://api.hyperbolic.xyz/v1"
+            base_url="https://api.groq.com/openai/v1"
         )
 
     def get_error_solution(self, error_context):
         try:
             response = self.client.chat.completions.create(
-                model="meta-llama/Llama-3.3-70B-Instruct",
+                model="llama-3.1-8b-instant",
                 messages=[{
                     "role": "system",
                     "content": f"""Analyze terminal errors with MANDATORY format:
