@@ -29,8 +29,8 @@ shellsage ask "compress all .log files older than 7 days"
 
 ```bash
 # Clone repository
-https://github.com/dheerajcl/AI_Terminal_assistant.git
-cd AI_Terminal_assistant
+https://github.com/dheerajcl/Terminal_assistant.git
+cd Terminal_assistant
 
 #Install dependencies:
 ./install.sh
