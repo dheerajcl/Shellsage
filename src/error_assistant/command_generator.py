@@ -17,47 +17,61 @@ class CommandGenerator:
                 model="llama-3.1-8b-instant",
                 messages=[{
                     "role": "system",
-                    "content": f"""Generate terminal commands for user queries. Follow these rules:
-                    
-1. For multi-step operations, list all required commands in order
-2. Include necessary checks/pre-requisites
-3. Format response as:
-🛠️ Step 1: `command1`
-📝 Explanation: Brief description
-🛠️ Step 2: `command2`
-📝 Explanation: Brief description
+                    "content": f"""Generate terminal commands with precision:
 
-Example for "push code to github":
-🛠️ Step 1: `git status`
-📝 Explanation: Check current repository status
-🛠️ Step 2: `git add .`
-📝 Explanation: Stage all changes
-🛠️ Step 3: `git commit -m "Commit message"`
-📝 Explanation: Create commit with message
-🛠️ Step 4: `git push origin main`
-📝 Explanation: Push to remote repository
+1. STRICT requirement analysis before suggesting commands
+2. SINGLE command if sufficient, MULTI-STEP only when necessary
+3. Include safety checks and confirmation prompts
+4. Add WARNINGS for destructive operations
+5. Consider OS: {context.get('os', 'Linux')}
+6. Current directory: {context.get('cwd', 'Unknown')}
 
-Current Context: {context or 'No additional context'}"""
+Response format:
+🧠 Analysis: <brief needs assessment>
+⚠️ Warning: <if dangerous>
+🛠️ Command: `[command]`
+📝 Details: <parameters explanation>
+🔍 Check: <verification step>"""
                 }, {
                     "role": "user",
                     "content": query
                 }],
                 temperature=0.1,
-                max_tokens=500
+                max_tokens=700
             )
             return self._parse_response(response.choices[0].message.content)
         
         except Exception as e:
-            return [f"API Error: {str(e)}"]
+            return [{
+            'type': 'warning',
+            'content': f"API Error: {str(e)}"
+            }, {
+                'type': 'command',
+                'content': None,
+                'details': None
+            }]
 
     def _parse_response(self, response):
-        steps = []
-        pattern = r'🛠️ Step \d+: `(.+?)`\n📝 Explanation: (.+?)(?=\n🛠️|$)'
-        matches = re.findall(pattern, response, re.DOTALL)
+        # Improved pattern matching for different components
+        components = {
+            'analysis': re.search(r'🧠 Analysis: (.+)', response),
+            'warning': re.search(r'⚠️ Warning: (.+)', response),
+            'command': re.search(r'🛠️ Command: `(.+?)`', response),
+            'details': re.search(r'📝 Details: (.+)', response),
+            'check': re.search(r'🔍 Check: (.+)', response)
+        }
         
-        for match in matches:
-            steps.append({
-                'command': match[0].strip(),
-                'explanation': match[1].strip()
-            })
-        return steps
+        return [{
+            'type': 'analysis',
+            'content': components['analysis'].group(1) if components['analysis'] else None
+        }, {
+            'type': 'warning',
+            'content': components['warning'].group(1) if components['warning'] else None
+        }, {
+            'type': 'command',
+            'content': components['command'].group(1) if components['command'] else None,
+            'details': components['details'].group(1) if components['details'] else None
+        }, {
+            'type': 'check',
+            'content': components['check'].group(1) if components['check'] else None
+        }]

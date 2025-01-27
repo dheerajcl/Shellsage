@@ -1,26 +1,32 @@
 import subprocess
 import sys
-import shlex
 import os
 import re
 import click
+from collections import deque
 from .llm_handler import DeepSeekLLMHandler
 
 class ErrorInterceptor:
     def __init__(self):
         self.llm_handler = DeepSeekLLMHandler()
+        self.command_history = deque(maxlen=3)
         self.last_command = ""
 
     def run_command(self, command):
+        """Execute command with error interception"""
         try:
-            self.last_command = ' '.join(command)
-            # Increase buffer size for large outputs
+            full_cmd = ' '.join(command)
+            self.last_command = full_cmd
+            self.command_history.append(full_cmd)
+            
+            # Execute with live terminal interaction
             result = subprocess.run(
-                self.last_command,
+                full_cmd,
                 shell=True,
-                capture_output=True,
-                text=True,
-                bufsize=1024 * 1024  # 1MB buffer
+                check=False,
+                stdin=sys.stdin,
+                stdout=sys.stdout,
+                stderr=sys.stderr
             )
             
             if result.returncode != 0:
@@ -33,6 +39,7 @@ class ErrorInterceptor:
             sys.exit(1)
 
     def auto_analyze(self, command, exit_code):
+        """Automatically analyze failed commands from shell hook"""
         result = subprocess.CompletedProcess(
             args=command,
             returncode=exit_code,
@@ -42,8 +49,38 @@ class ErrorInterceptor:
         self._handle_error(result)
 
     def _handle_error(self, result):
-        # Get git status if it's a git command
-        git_context = ''
+        """Process and analyze command errors"""
+        error_context = {
+            'command': self.last_command,
+            'command_history': list(self.command_history)[:-1],
+            'error_output': self._get_full_error_output(result),
+            'cwd': os.getcwd(),
+            'exit_code': result.returncode,
+            'env': os.environ.copy(),
+            'additional_context': self._get_additional_context()
+        }
+        
+        print("\n\033[90m🔎 Analyzing error...\033[0m")
+        solution = self.llm_handler.get_error_solution(error_context)
+        
+        if solution:
+            self._show_analysis(solution)
+        else:
+            print("\n\033[91mError: Could not get analysis. Please check your API key and connection.\033[0m")
+
+    def _get_full_error_output(self, result):
+        """Combine stderr/stdout and sanitize"""
+        error_output = (result.stderr + '\n' + result.stdout).strip()
+        # Remove ANSI escape codes
+        return re.sub(r'\x1B\[[0-?]*[ -/]*[@-~]', '', error_output)
+    
+
+
+    def _get_additional_context(self):
+        """Gather additional context for error analysis"""
+        context = ""
+        
+        # Git context
         if self.last_command.startswith('git '):
             try:
                 git_status = subprocess.run(
@@ -52,84 +89,84 @@ class ErrorInterceptor:
                     capture_output=True,
                     text=True
                 )
-                git_context = f"\nGit Status:\n{git_status.stdout}"
+                context += f"\nGit Status:\n{git_status.stdout}"
+                
+                git_remote = subprocess.run(
+                    'git remote -v',
+                    shell=True,
+                    capture_output=True,
+                    text=True
+                )
+                context += f"\nGit Remotes:\n{git_remote.stdout}"
             except:
                 pass
-            
-        error_context = {
-            'command': self.last_command,
-            'error_output': (result.stderr + '\n' + result.stdout).strip() if result.stdout else result.stderr,
-            'cwd': os.getcwd(),
-            'exit_code': result.returncode,
-            'additional_context': git_context
-        }
         
-        print("\n\033[90m🔎 Analyzing error...\033[0m")
-        solution = self.llm_handler.get_error_solution(error_context)
-
-        if solution:
-            self._show_analysis(solution)
-        else:
-            print("\n\033[91mError: Could not get analysis. Please check your API key and connection.\033[0m")
+        # Docker context
+        if 'docker' in self.last_command:
+            try:
+                docker_ps = subprocess.run(
+                    'docker ps -a',
+                    shell=True,
+                    capture_output=True,
+                    text=True
+                )
+                context += f"\nDocker Containers:\n{docker_ps.stdout}"
+            except:
+                pass
         
+        return context
 
     def _show_analysis(self, solution):
+        """Display error analysis with improved command extraction"""
+        # Improved regex for command extraction
+        fix_match = re.search(r'🛠️ Fix: `([^`]+)`', solution)
         components = {
             'cause': re.search(r'🔍 Cause: (.+)', solution),
-            'fix': re.search(r'🛠️ Fix: `(.+?)`', solution),
+            'fix': fix_match.group(1) if fix_match else None,
             'explanation': re.search(r'📚 Explanation: (.+)', solution),
+            'warning': re.search(r'⚠️ Warning: (.+)', solution),
             'prevention': re.search(r'🔒 Prevention: (.+)', solution)
         }
 
         print("\n\033[94m=== ERROR ANALYSIS ===\033[0m")
-        self._print_component(components['cause'], '\033[91m')
-        self._print_component(components['explanation'], '\033[93m')
-        self._print_component(components['prevention'], '\033[92m')
+        self._print_component(components['cause'], '\033[91m', "Cause")
+        self._print_component(components['explanation'], '\033[93m', "Explanation")
+        self._print_component(components['warning'], '\033[91m', "Warning")
+        self._print_component(components['prevention'], '\033[92m', "Prevention")
 
         if components['fix']:
-            self._prompt_fix(components['fix'].group(1))
+            self._prompt_fix(components['fix'])
 
-    def _print_component(self, match, color):
+    def _print_component(self, match, color, label):
+        """Improved component printing"""
         if match:
-            print(f"{color}{match.group(0)}\033[0m")
+            print(f"{color}● {label}: {match.group(1).strip()}\033[0m")
 
     def _prompt_fix(self, command):
-        if click.confirm(f"\n\033[95m🚀 Run fix command: {command}? (Y/n)\033[0m"):
-            self._execute_command(command)
+        """Sanitize and execute command"""
+        # Clean command from LLM artifacts
+        clean_cmd = re.sub(r'^\s*\[.*?\]\s*', '', command).strip()
+        if click.confirm(f"\n\033[95m🚀 Run fix command: '{clean_cmd}'? (Y/n)\033[0m"):
+            self._execute_command(clean_cmd)
 
     def _execute_command(self, command):
+        """Execute with full terminal passthrough"""
         try:
-            result = subprocess.run(
+            # Directly pass through stdin/stdout/stderr
+            subprocess.run(
                 command,
                 shell=True,
-                capture_output=True,
-                text=True
+                check=False,
+                stdin=sys.stdin,
+                stdout=sys.stdout,
+                stderr=sys.stderr
             )
-            print("\n\033[92m=== COMMAND OUTPUT ===\033[0m")
-            print(result.stdout if result.stdout else "(No output)")
-            if result.stderr:
-                print(f"\n\033[91m=== ERRORS ===\033[0m\n{result.stderr}")
-                
         except Exception as e:
-            print(f"\n\033[91mEXECUTION FAILED: {str(e)}\033[0m")
+            print(f"\n\033[91mExecution failed: {str(e)}\033[0m")
 
     def _get_native_error(self, command):
+        """Get error output directly from command"""
         try:
-            # Special handling for git commands
-            if command.startswith('git '):
-                # Get both stderr and stdout for git commands as git uses both
-                result = subprocess.run(
-                    command,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    env={'LANG': 'en_US.UTF-8', 'GIT_TERMINAL_PROMPT': '0'}
-                )
-                # Combine stdout and stderr for git commands as git uses both
-                error_output = result.stdout + '\n' + result.stderr if result.stdout else result.stderr
-                return error_output.strip()
-
-            # Normal command handling
             result = subprocess.run(
                 command,
                 shell=True,

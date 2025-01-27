@@ -14,43 +14,53 @@ class DeepSeekLLMHandler:
 
     def get_error_solution(self, error_context):
         try:
+            # Truncate long errors but keep critical parts
+            error_output = self._sanitize_error_output(error_context['error_output'])
+            command_history = "\n".join([f"{i+1}. {cmd}" for i, cmd in enumerate(error_context.get('command_history', []))])
+            
             response = self.client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=[{
                     "role": "system",
-                    "content": f"""Analyze terminal errors with MANDATORY format:
+                    "content": f"""Analyze terminal errors with technical precision. Focus on:
 
-**Command**: {error_context['command']}
-**Error**: {error_context['error_output']}
-**CWD**: {error_context['cwd']}
-**Exit Code**: {error_context['exit_code']}
+- Exit code {error_context['exit_code']} patterns
+- Permission issues (sudo vs user permissions)
+- Path/directory context: {error_context['cwd']}
+- Command sequence history:
+{command_history}
 
-Response MUST contain:
-1. 🔍 Cause: <1-line diagnosis>
-2. 🛠️ Fix: `[executable command]`
-3. 📚 Explanation: <technical reason>
-4. 🔒 Prevention: <actionable tip>
+Error Output Analysis:
+{error_output}
 
-Examples:
-For 'fastfetc' typo:
-🔍 Cause: Typo in command name
-🛠️ Fix: `fastfetch`
-📚 Explanation: 'fastfetc' not found, correct command is 'fastfetch'
-🔒 Prevention: Use 'apt list fastfetch' to verify installation
+Response MUST:
+1. Identify PRIMARY error cause (file, permission, syntax, etc)
+2. Provide EXACT fix command WITHOUT any commentary in backticks
+Example: 🛠️ Fix: `fastfetch`
+3. Explain technical root cause
+4. Suggest prevention strategy
+5. Flag any destructive operations (rm, format, etc)
 
-For permission denied:
-🔍 Cause: Missing execute permissions
-🛠️ Fix: `chmod +x script.sh`
-📚 Explanation: File lacks executable permission (mode 755 required)
-🔒 Prevention: Always check permissions with 'ls -l'"""
+Structure response STRICTLY as:
+🔍 Cause: <1-line summary>
+🛠️ Fix: `[command]` (required)
+📚 Explanation: <technical details>
+⚠️ Warning: <if destructive>
+🔒 Prevention: <actionable advice>"""
                 }, {
                     "role": "user",
-                    "content": "Provide analysis for this error:"
+                    "content": "Diagnose this error with maximum technical accuracy:"
                 }],
                 temperature=0.1,
-                max_tokens=512
+                max_tokens=1024  # Increased for detailed analysis
             )
             return response.choices[0].message.content
         
         except Exception as e:
             return f"Error analysis failed: {str(e)}"
+
+    def _sanitize_error_output(self, error):
+        # Keep first 500 chars and last 500 chars for critical info
+        if len(error) > 1000:
+            return f"{error[:500]}\n[...truncated...]\n{error[-500:]}"
+        return error

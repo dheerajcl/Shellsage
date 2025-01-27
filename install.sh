@@ -26,10 +26,10 @@ source shellsage_env/bin/activate
 echo -e "${YELLOW}🔑 API Key Setup (Required for LLM features)...${NC}"
 
 # Check if key already exists
-if [ -z "$HYPERBOLIC_API_KEY" ]; then
-    read -p "Enter your Hyperbolic API key (get it from https://hyperbolic.xyz): " api_key
-    echo "export HYPERBOLIC_API_KEY='$api_key'" >> shellsage_env/bin/activate
-    echo "export HYPERBOLIC_API_KEY='$api_key'" >> ~/.bashrc
+if [ -z "$GROQ_API_KEY" ]; then
+    read -p "Enter your Groq API key (get it from https://groq.com/#): " api_key
+    echo "export GROQ_API_KEY='$api_key'" >> shellsage_env/bin/activate
+    echo "export GROQ_API_KEY='$api_key'" >> ~/.bashrc
 fi
 
 # Reload activation script
@@ -55,7 +55,7 @@ echo -e "3. Test installation: ${YELLOW}shellsage ask 'update packages'${NC}"
 
 echo -e "${YELLOW}ℹ️ To set API key later:"
 echo -e "1. Edit ~/.bashrc and add:"
-echo -e "   export HYPERBOLIC_API_KEY='your_api_key'"
+echo -e "   export GROQ_API_KEY='your_api_key'"
 echo -e "2. Run: source ~/.bashrc${NC}"
 
 exit 0
