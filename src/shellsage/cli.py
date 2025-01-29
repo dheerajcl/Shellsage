@@ -4,6 +4,7 @@ import os
 import subprocess
 from .error_interceptor import ErrorInterceptor
 from .command_generator import CommandGenerator
+from .model_manager import ModelManager
 
 @click.group()
 def cli():
@@ -51,7 +52,6 @@ def ask(query, execute):
         
         if execute:
             if click.confirm("\n\033[95m🚀 Execute this command? (Y/n)\033[0m"):
-                # Allow full terminal interaction
                 subprocess.run(
                     command_item['content'],
                     shell=True,
@@ -77,6 +77,24 @@ PROMPT_COMMAND="shell_sage_prompt"
     click.echo("# Add this to your shell config:")
     click.echo(hook)
     click.echo("\n# Then run: source ~/.bashrc")
+
+@cli.command()
+def setup():
+    """Interactive configuration setup"""
+    manager = ModelManager()
+    manager.interactive_setup()
+    click.echo("✅ Configuration updated!")
+
+@cli.command()
+@click.option('--mode', type=click.Choice(['local', 'api']))
+def config(mode):
+    """View or change configuration"""
+    manager = ModelManager()
+    if mode:
+        manager.switch_mode(mode)
+        click.echo(f"Switched to {mode} mode")
+    else:
+        click.echo(f"Current mode: {manager.config['mode']}")
 
 if __name__ == "__main__":
     cli()

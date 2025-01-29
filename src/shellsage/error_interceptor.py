@@ -2,6 +2,7 @@ import subprocess
 import sys
 import os
 import re
+import yaml
 import click
 from collections import deque
 from .llm_handler import DeepSeekLLMHandler
@@ -52,21 +53,23 @@ class ErrorInterceptor:
         """Process and analyze command errors"""
         error_context = {
             'command': self.last_command,
-            'command_history': list(self.command_history)[:-1],
             'error_output': self._get_full_error_output(result),
             'cwd': os.getcwd(),
-            'exit_code': result.returncode,
-            'env': os.environ.copy(),
-            'additional_context': self._get_additional_context()
+            'exit_code': result.returncode
         }
-        
+
+        if os.getenv('SHELLSAGE_DEBUG'):
+            print("\n\033[90m[DEBUG] Error Context:")
+            print(yaml.dump(error_context, allow_unicode=True) + "\033[0m")
+
+        # THE MISSING PART: Generate and show analysis
         print("\n\033[90m🔎 Analyzing error...\033[0m")
         solution = self.llm_handler.get_error_solution(error_context)
-        
+
         if solution:
             self._show_analysis(solution)
         else:
-            print("\n\033[91mError: Could not get analysis. Please check your API key and connection.\033[0m")
+            print("\n\033[91mError: Could not get analysis\033[0m")
 
     def _get_full_error_output(self, result):
         """Combine stderr/stdout and sanitize"""
@@ -117,30 +120,31 @@ class ErrorInterceptor:
         return context
 
     def _show_analysis(self, solution):
-        """Display error analysis with improved command extraction"""
-        # Improved regex for command extraction
-        fix_match = re.search(r'🛠️ Fix: `([^`]+)`', solution)
+        """More flexible component extraction"""
         components = {
-            'cause': re.search(r'🔍 Cause: (.+)', solution),
-            'fix': fix_match.group(1) if fix_match else None,
-            'explanation': re.search(r'📚 Explanation: (.+)', solution),
-            'warning': re.search(r'⚠️ Warning: (.+)', solution),
-            'prevention': re.search(r'🔒 Prevention: (.+)', solution)
+            'cause': re.search(r'🔍 Root Cause: (.+?)(?=\n🛠️|\n📚|\n⚠️|\n🔒|$)', solution, re.DOTALL),
+            'fix': re.search(r'🛠️ Fix: `(.+?)`', solution),
+            'explanation': re.search(r'📚 Technical Explanation: (.+?)(?=\n⚠️|\n🔒|$)', solution, re.DOTALL),
+            'risk': re.search(r'⚠️ Potential Risks: (.+?)(?=\n🔒|$)', solution, re.DOTALL),
+            'prevention': re.search(r'🔒 Prevention Tip: (.+?)(?=\n|$)', solution, re.DOTALL)
         }
 
         print("\n\033[94m=== ERROR ANALYSIS ===\033[0m")
-        self._print_component(components['cause'], '\033[91m', "Cause")
-        self._print_component(components['explanation'], '\033[93m', "Explanation")
-        self._print_component(components['warning'], '\033[91m', "Warning")
-        self._print_component(components['prevention'], '\033[92m', "Prevention")
+        self._print_component(components['cause'], '\033[91m', "ROOT CAUSE")
+        self._print_component(components['explanation'], '\033[93m', "TECHNICAL DETAILS")
+        self._print_component(components['risk'], '\033[33m', "POTENTIAL RISKS")
+        self._print_component(components['prevention'], '\033[92m', "PREVENTION TIP")
 
         if components['fix']:
-            self._prompt_fix(components['fix'])
+            self._prompt_fix(components['fix'].group(1))
+
 
     def _print_component(self, match, color, label):
-        """Improved component printing"""
+        """Enhanced component display"""
         if match:
-            print(f"{color}● {label}: {match.group(1).strip()}\033[0m")
+            cleaned = match.group(1).replace('\n', ' ').strip()
+            print(f"{color}▸ {label}:\n   {cleaned}\033[0m")
+
 
     def _prompt_fix(self, command):
         """Sanitize and execute command"""
