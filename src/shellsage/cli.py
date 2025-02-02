@@ -2,6 +2,7 @@ import sys
 import click
 import os
 import subprocess
+import inquirer
 from .error_interceptor import ErrorInterceptor
 from .command_generator import CommandGenerator
 from .model_manager import ModelManager
@@ -87,14 +88,64 @@ def setup():
 
 @cli.command()
 @click.option('--mode', type=click.Choice(['local', 'api']))
-def config(mode):
-    """View or change configuration"""
+@click.option('--model', help="Specify model name when switching to local")
+def config(mode, model):
+    """Configure operation mode and models"""
+    from inquirer import prompt, List  # Explicit import
     manager = ModelManager()
+    
     if mode:
-        manager.switch_mode(mode)
+        if mode == 'local':
+            if model:
+                manager.switch_mode('local', model_name=model)
+            else:
+                models = manager.list_local_models()
+                if not models:
+                    click.echo("No local models found! Run 'shellsage setup' first")
+                    return
+                    
+                question = [
+                    List('model',
+                        message="Select local model:",
+                        choices=models,
+                        default=manager.config['local']['model']
+                    )
+                ]
+                answers = prompt(question)
+                manager.switch_mode('local', model_name=answers['model'])
+                
+        elif mode == 'api':
+            manager.switch_mode('api')
+            
         click.echo(f"Switched to {mode} mode")
     else:
         click.echo(f"Current mode: {manager.config['mode']}")
+        if manager.config['mode'] == 'local':
+            click.echo(f"Active model: {manager.config['local']['model']}")
+
+
+@cli.command()
+@click.option('--provider', type=click.Choice(['ollama', 'huggingface']))
+def models(provider):
+    """Manage local models"""
+    manager = ModelManager()
+    
+    if provider:
+        manager.config['local']['provider'] = provider
+        manager._save_config()
+    
+    click.echo(f"Local provider: {manager.config['local']['provider']}")
+    
+    if manager.config['local']['provider'] == 'ollama':
+        models = manager.get_ollama_models()
+        click.echo("\nInstalled Ollama models:")
+    else:
+        models = manager._get_hf_models()
+        click.echo("\nInstalled HuggingFace models:")
+        
+    for model in models:
+        click.echo(f"- {model}")    
+
 
 if __name__ == "__main__":
     cli()

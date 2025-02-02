@@ -11,11 +11,11 @@ NC='\033[0m' # No Color
 
 echo -e "${YELLOW}🚀 Starting Shell Sage Installation...${NC}"
 
-# Check for Python 3.8+
-if ! python3 -c 'import sys; exit(1) if sys.version_info < (3,8) else exit(0)' &>/dev/null; then
-    echo -e "${RED}❌ Python 3.8 or newer is required${NC}"
-    exit 1
-fi
+# # Check for Python 3.8+
+# if ! python3 -c 'import sys; exit(1) if sys.version_info < (3,8) else exit(0)' &>/dev/null; then
+#     echo -e "${RED}❌ Python 3.8 or newer is required${NC}"
+#     exit 1
+# fi
 
 # Create virtual environment
 if [ ! -d "shellsage_env" ]; then

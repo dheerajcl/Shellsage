@@ -48,11 +48,22 @@ class ModelManager:
         else:
             self.client = None  # Local handled separately
 
-    def switch_mode(self, new_mode):
-        """Change operation mode"""
+    def switch_mode(self, new_mode, model_name=None):
+        """Change mode with optional model selection"""
         self.config['mode'] = new_mode
+
+        if new_mode == 'local' and model_name:
+            if self.config['local']['provider'] == 'ollama':
+                # Validate model exists
+                if model_name not in self.get_ollama_models():
+                    raise ValueError(f"Model {model_name} not installed")
+                self.config['local']['model'] = model_name
+            elif self.config['local']['provider'] == 'huggingface':
+                self.config['local']['model'] = model_name
+
         self._save_config()
         self._init_client()
+
 
     def get_ollama_models(self):
         """List installed Ollama models"""
@@ -107,6 +118,21 @@ class ModelManager:
             }
         })
         self._save_config()
+
+    def list_local_models(self):
+        """Get all available local models"""
+        models = []
+        if self.config['local']['provider'] == 'ollama':
+            models = self.get_ollama_models()
+        elif self.config['local']['provider'] == 'huggingface':
+            models = self._get_hf_models()
+        return models
+    
+    def _get_hf_models(self):
+        """List downloaded HuggingFace models"""
+        model_dir = Path.home() / ".cache/huggingface/hub"
+        return [f.name for f in model_dir.glob("models--*") if f.is_dir()]
+
 
     def _save_config(self):
         """Save configuration to file"""

@@ -45,10 +45,15 @@ $ shellsage ask "find large files over 1GB"
 - (4GB+ recommended for local models)
 
 ```bash
-# 1. Install Ollama for local AI
+# 1. Clone & install Shell Sage
+git clone https://github.com/dheerajcl/Terminal_assistant.git
+cd Terminal_assistant
+./install.sh
+
+# 2. Install Ollama for local AI
 curl -fsSL https://ollama.com/install.sh | sh
 
-# 2. Get base model (3.8GB) 
+# 3. Get base model (3.8GB) 
 #for example
 ollama pull llama3:8b-instruct-q4_1
 
@@ -56,10 +61,7 @@ ollama pull llama3:8b-instruct-q4_1
 export GROQ_API_KEY=your_key_here
 shellsage config --mode api
 
-# 3. Clone & install Shell Sage
-git clone https://github.com/dheerajcl/Terminal_assistant.git
-cd Terminal_assistant
-./install.sh
+
 ```
 
 ---
@@ -86,6 +88,19 @@ shellsage setup
 ```bash
 # Switch modes
 shellsage config --mode local  # or 'api' (Only Groq is supported at present, other options will roll out soon!)
+
+# List available models
+shellsage models
+
+# Switch to specific model
+shellsage config --mode local --model llama3:70b-instruct-q4_1
+
+# Interactive switch
+shellsage config --mode local
+? Select local model: 
+  ▸ llama3:8b-instruct-q4_1 
+    mistral:7b-instruct-v0.3
+    phi3:mini-128k-instruct
 ```
 
 ---
