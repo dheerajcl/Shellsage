@@ -36,6 +36,16 @@ $ shellsage ask "find large files over 1GB"
 - Step-by-step complex operations
 - Safety checks for destructive commands
 
+### 🌐 Supported API Providers
+- Groq
+- OpenAI
+- Anthropic 
+- Fireworks.ai
+- OpenRouter
+- Deepseek
+
+*Switch providers with `shellsage config --provider <name>`*
+
 ---
 
 ## Installation
@@ -57,12 +67,18 @@ curl -fsSL https://ollama.com/install.sh | sh
 #for example
 ollama pull llama3:8b-instruct-q4_1
 
-# or API key (Currently GROQ, other options will be available soon!)
-export GROQ_API_KEY=your_key_here
-shellsage config --mode api
+# or API key (Currently supports Groq, OpenAI, Anthropic, Fireworks, OpenRouter, Deepseek)
+# put your desired provider api in .env file 
+shellsage config --mode api --provider groq
 
 
 ```
+
+### Configuration Notes
+- Rename `.env.example` → `.env` and populate required values
+- API performance varies by provider (Groq fastest, Anthropic most capable)
+- Local models need 4GB+ RAM (llama3:8b) to 16GB+ (llama3:70b)
+- Response quality depends on selected model capabilities
 
 ---
 
@@ -81,19 +97,34 @@ shellsage setup
   ▸ llama3:8b-instruct-q4_1 (Recommended)
     mistral:7b-instruct-v0.3
     phi3:mini-128k-instruct
+
+# If API mode selected:
+? Choose API provider:
+  ▸ Groq
+    OpenAI
+    Anthropic
+    Fireworks
+    Deepseek
+
+? Enter Groq API key: [hidden input]
+
+? Select Groq model:
+  ▸ mixtral-8x7b-32768 
+    llama3-70b-8192
+
+✅ API configuration updated!
+
 ```
 
 ### Runtime Control
 
 ```bash
 # Switch modes
-shellsage config --mode local  # or 'api' (Only Groq is supported at present, other options will roll out soon!)
+shellsage config --mode api  # or 'local'
 
-# List available models
-shellsage models
 
 # Switch to specific model
-shellsage config --mode local --model llama3:70b-instruct-q4_1
+shellsage config --mode local --model <model_name>
 
 # Interactive switch
 shellsage config --mode local
@@ -112,6 +143,7 @@ Shell Sage is currently in **alpha development**.
 **Known Limitations**:
 - Limited Windows support
 - Occasional false positives in error detection
+- API mode requires provider-specific key
 
 **Roadmap**:
 - [x] Local LLM support

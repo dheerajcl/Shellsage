@@ -45,14 +45,18 @@ pip install -e .
 
 # Post-install setup
 echo -e "${YELLOW}⚙️ Running initial configuration...${NC}"
-if [ ! -f ~/.shellsage/config.yaml ]; then
+if [ -f .env ]; then
     shellsage setup
+else
+    echo -e "${RED}❌ Missing .env file - make sure to clone the repository properly${NC}"
+    exit 1
 fi
 
 echo -e "\n${GREEN}✅ Installation Complete!${NC}"
 echo -e "To start using Shell Sage:"
 echo -e "1. Activate environment: ${YELLOW}source shellsage_env/bin/activate${NC}"
 echo -e "2. Test installation: ${YELLOW}shellsage ask 'update packages'${NC}"
-echo -e "3. For local models: ${YELLOW}ollama pull llama3:8b-instruct-q4_1${NC}"
+echo -e "3. Configure API: ${YELLOW}shellsage config --mode api --provider <name>${NC}"
+echo -e "4. For local models: ${YELLOW}ollama pull llama3:8b-instruct-q4_1${NC}"
 
 exit 0

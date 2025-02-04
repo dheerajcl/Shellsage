@@ -1,69 +1,93 @@
+from .helpers import update_env_variable
 import os
 import yaml
 import requests
 from pathlib import Path
 from openai import OpenAI
 import inquirer
+from anthropic import Anthropic
+from dotenv import load_dotenv
+
+
+# Define providers at module level
+PROVIDERS = {
+    'groq': {
+        'client': OpenAI,
+        'base_url': 'https://api.groq.com/openai/v1',
+        'models': ['llama-3.1-8b-instant', 'deepseek-r1-distill-llama-70b', 'gemma2-9b-it', 'llama-3.3-70b-versatile', 'llama3-70b-8192', 'llama3-8b-8192', 'mixtral-8x7b-32768']
+    },
+    'openai': {
+        'client': OpenAI,
+        'base_url': 'https://api.openai.com/v1',
+        'models': ['gpt-4o', 'chatgpt-4o-latest', 'o1', 'o1-mini', 'o1-preview', 'gpt-4o-2024-08-06', 'gpt-4o-mini-2024-07-18', 'gpt-4-turbo', 'gpt-3.5-turbo']
+    },
+    'anthropic': {
+        'client': Anthropic,
+        'models': ['claude-3-opus-20240229', 'claude-3-sonnet-20240229']
+    },
+    'fireworks': {
+        'client': OpenAI,
+        'base_url': 'https://api.fireworks.ai/inference/v1',
+        'models': ['accounts/fireworks/models/llama-v2-70b-chat']
+    },
+    'openrouter': {
+        'client': OpenAI,
+        'base_url': 'https://openrouter.ai/api/v1',
+        'models': ['google/palm-2', 'meta-llama/llama-3-70b-instruct']
+    },
+    'deepseek': {
+        'client': OpenAI,
+        'base_url': 'https://api.deepseek.com/v1',
+        'models': ['deepseek-chat']
+    }
+}
 
 class ModelManager:
-    CONFIG_PATH = Path.home() / ".shellsage/config.yaml"
+    PROVIDERS = PROVIDERS  # Add this line to expose the module-level PROVIDERS
     
     def __init__(self):
-        self.config = self._load_config()
+        load_dotenv(override=True)
+        self.mode = os.getenv('MODE', 'local')
+        self.local_model = os.getenv('LOCAL_MODEL', 'llama3:8b-instruct-q4_1')
         self.client = None
         self._init_client()
         
-    def _load_config(self):
-        """Load or create configuration with defaults"""
-        default_config = {
-            'mode': 'local',
-            'local': {
-                'provider': 'ollama',
-                'model': 'llama3:8b-instruct-q4_1'
-            },
-            'api': {
-                'provider': 'groq',
-                'key': os.getenv('GROQ_API_KEY', ''),
-                'model': 'llama3-8b-8192'
-            }
-        }
-        
-        try:
-            self.CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-            if self.CONFIG_PATH.exists():
-                with open(self.CONFIG_PATH) as f:
-                    return {**default_config, **yaml.safe_load(f)}
-            return default_config
-        except Exception as e:
-            print(f"Config error: {e}")
-            return default_config
-
     def _init_client(self):
         """Initialize active client based on config"""
-        if self.config['mode'] == 'api':
-            self.client = OpenAI(
-                api_key=self.config['api']['key'],
-                base_url="https://api.groq.com/openai/v1"
-            )
+        if self.mode == 'api':
+            provider = os.getenv('ACTIVE_API_PROVIDER', 'groq')
+            api_key = os.environ.get(f"{provider.upper()}_API_KEY")
+            
+            if not api_key:
+                raise ValueError(f"API key for {provider} not set. Run 'shellsage setup'")
+
+            if self.PROVIDERS[provider]['client'] == OpenAI:
+                self.client = OpenAI(
+                    api_key=api_key,
+                    base_url=self.PROVIDERS[provider].get('base_url')
+                )
+            # Special case for Anthropic
+            elif provider == 'anthropic':
+                self.client = Anthropic(api_key=api_key)
+            else:
+                raise ValueError(f"Unsupported provider: {provider}")
         else:
-            self.client = None  # Local handled separately
+            # Initialize local client if needed
+            self.client = "ollama"  # Just a flag for local mode
 
     def switch_mode(self, new_mode, model_name=None):
         """Change mode with optional model selection"""
-        self.config['mode'] = new_mode
-
+        update_env_variable('MODE', new_mode)
+        
         if new_mode == 'local' and model_name:
-            if self.config['local']['provider'] == 'ollama':
-                # Validate model exists
-                if model_name not in self.get_ollama_models():
-                    raise ValueError(f"Model {model_name} not installed")
-                self.config['local']['model'] = model_name
-            elif self.config['local']['provider'] == 'huggingface':
-                self.config['local']['model'] = model_name
-
-        self._save_config()
+            update_env_variable('LOCAL_MODEL', model_name)
+        elif new_mode == 'api' and model_name:
+            provider = next(p for p in self.PROVIDERS if model_name in self.PROVIDERS[p]['models'])
+            update_env_variable('ACTIVE_API_PROVIDER', provider)
+            update_env_variable('API_MODEL', model_name)
+            
+        load_dotenv(override=True)
         self._init_client()
-
 
     def get_ollama_models(self):
         """List installed Ollama models"""
@@ -79,23 +103,16 @@ class ModelManager:
             inquirer.List('mode',
                 message="Select operation mode:",
                 choices=['local', 'api'],
-                default=self.config['mode']
+                default=self.mode
             ),
-            inquirer.List('local_provider',
-                message="Choose local provider:",
-                choices=['ollama', 'huggingface'],
-                default=self.config['local']['provider'],
-                ignore=lambda x: x['mode'] != 'local'
-            ),
-            inquirer.List('ollama_model',
-                message="Select Ollama model:",
+            inquirer.List('local_model',
+                message="Select local model:",
                 choices=self.get_ollama_models(),
-                default=self.config['local']['model'],
-                ignore=lambda x: x['local_provider'] != 'ollama'
+                default=self.local_model
             ),
             inquirer.Text('api_key',
                 message="Enter Groq API key:",
-                default=self.config['api']['key'],
+                default=os.getenv(f"GROQ_API_KEY", ''),
                 ignore=lambda x: x['mode'] != 'api'
             )
         ]
@@ -106,58 +123,55 @@ class ModelManager:
 
     def _update_config(self, answers):
         """Update configuration from answers"""
-        self.config.update({
-            'mode': answers['mode'],
-            'local': {
-                'provider': answers.get('local_provider', 'ollama'),
-                'model': answers.get('ollama_model', 'llama3:8b-instruct-q4_1')
-            },
-            'api': {
-                'key': answers.get('api_key', ''),
-                'model': 'llama3-8b-8192'
-            }
-        })
-        self._save_config()
+        self.mode = answers['mode']
+        self.local_model = answers['local_model']
+        os.environ["ACTIVE_API_PROVIDER"] = "groq" if self.mode == 'api' else ""  # Fixed provider assignment
+        os.environ["GROQ_API_KEY"] = answers['api_key']
+        load_dotenv(override=True)
 
     def list_local_models(self):
         """Get all available local models"""
         models = []
-        if self.config['local']['provider'] == 'ollama':
+        if self.mode == 'local':
             models = self.get_ollama_models()
-        elif self.config['local']['provider'] == 'huggingface':
-            models = self._get_hf_models()
         return models
     
-    def _get_hf_models(self):
-        """List downloaded HuggingFace models"""
-        model_dir = Path.home() / ".cache/huggingface/hub"
-        return [f.name for f in model_dir.glob("models--*") if f.is_dir()]
-
-
-    def _save_config(self):
-        """Save configuration to file"""
-        with open(self.CONFIG_PATH, 'w') as f:
-            yaml.dump(self.config, f)
-
     def generate(self, prompt, max_tokens=512):
         """Unified generation interface"""
-        if self.config['mode'] == 'api':
-            return self._api_generate(prompt, max_tokens)
-        return self._local_generate(prompt)
+        try:
+            if self.mode == 'api':
+                return self._api_generate(prompt, max_tokens)
+            return self._local_generate(prompt)
+        except Exception as e:
+            raise RuntimeError(f"Generation failed: {str(e)}")
 
     def _api_generate(self, prompt, max_tokens):
-        """Generate using Groq API"""
-        response = self.client.chat.completions.create(
-            model=self.config['api']['model'],
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=max_tokens
-        )
-        return response.choices[0].message.content
+        """Generate using selected API provider"""
+        provider = os.getenv('ACTIVE_API_PROVIDER', 'groq')
+        model = os.getenv('API_MODEL')  # New environment variable
+        
+        try:
+            if self.PROVIDERS[provider]['client'] == OpenAI:
+                response = self.client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,
+                    max_tokens=max_tokens
+                )
+                return response.choices[0].message.content
+            elif provider == 'anthropic':
+                response = self.client.messages.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return response.content[0].text
+        except Exception as e:
+            raise RuntimeError(f"API Error ({provider}): {str(e)}")
 
     def _local_generate(self, prompt):
         """Generate using local provider"""
-        if self.config['local']['provider'] == 'ollama':
+        if self.mode == 'local':
             return self._ollama_generate(prompt)
         return self._hf_generate(prompt)
 
@@ -167,7 +181,7 @@ class ModelManager:
             response = requests.post(
                 "http://localhost:11434/api/generate",
                 json={
-                    "model": self.config['local']['model'],
+                    "model": self.local_model,
                     "prompt": prompt,
                     "stream": False,  # Force non-streaming
                     "options": {
@@ -188,7 +202,7 @@ class ModelManager:
         
         try:
             model = AutoModelForCausalLM.from_pretrained(
-                model_path=self.config['local']['model'],
+                model_path=self.local_model,
                 model_type='llama'
             )
             return model(prompt)

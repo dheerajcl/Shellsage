@@ -1,7 +1,0 @@
-api:
-  key: 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
-  model: llama3-8b-8192
-local:
-  model: gemma2:latest
-  provider: ollama
-mode: api

@@ -5,7 +5,10 @@ import subprocess
 import inquirer
 from .error_interceptor import ErrorInterceptor
 from .command_generator import CommandGenerator
-from .model_manager import ModelManager
+from .model_manager import ModelManager, PROVIDERS
+from .helpers import update_env_file, update_env_variable
+from dotenv import load_dotenv
+import re
 
 @click.group()
 def cli():
@@ -82,47 +85,179 @@ PROMPT_COMMAND="shell_sage_prompt"
 @cli.command()
 def setup():
     """Interactive configuration setup"""
-    manager = ModelManager()
-    manager.interactive_setup()
-    click.echo("✅ Configuration updated!")
+    if not os.path.exists('.env'):
+        click.echo("❌ Missing .env file - clone the repository properly")
+        return
+
+    # Mode selection
+    mode_q = inquirer.List(
+        'mode',
+        message="Select operation mode:",
+        choices=['local', 'api'],
+        default=os.getenv('MODE', 'local')
+    )
+    answers = inquirer.prompt([mode_q])
+    mode = answers['mode']
+    
+    if mode == 'local':
+        # Create/update .env with all providers
+        env_lines = [
+            f"# Shell Sage Configuration\n",
+            f"ACTIVE_API_PROVIDER=groq\n"
+        ]
+        for provider in PROVIDERS:
+            env_lines.append(f"{provider.upper()}_API_KEY=\n")
+        
+        if not os.path.exists('.env'):
+            with open('.env', 'w') as f:
+                f.writelines(env_lines)
+        
+        # API provider selection
+        provider_q = inquirer.List(
+            'provider',
+            message="Select API Provider:",
+            choices=list(PROVIDERS.keys())
+        )
+        answers = inquirer.prompt([provider_q])
+        provider = answers['provider']
+        
+        # Read directly from .env file instead of os.getenv
+        with open('.env') as f:
+            env_content = f.read()
+        existing_key = re.search(f"{provider.upper()}_API_KEY=(.*)", env_content)
+        if not existing_key or not existing_key.group(1).strip():
+            key_q = inquirer.Text(
+                'key',
+                message=f"Enter {provider} API key:"
+            )
+            key_answers = inquirer.prompt([key_q])
+            # Update .env without duplicates
+            update_env_file(provider, key_answers['key'])
+            load_dotenv(override=True)  # Now using the correct import
+        
+        # Model selection
+        models = PROVIDERS[provider]['models']
+        model_q = inquirer.List(
+            'model',
+            message=f"Select {provider} model:",
+            choices=models
+        )
+        model_answers = inquirer.prompt([model_q])
+        
+        # Update active provider using helper
+        update_env_variable('ACTIVE_API_PROVIDER', provider)
+        
+        click.echo("✅ API configuration updated!")
+    elif mode == 'api':
+        # Update provider FIRST before checking key
+        update_env_variable('ACTIVE_API_PROVIDER', provider)
+        load_dotenv(override=True)
+        
+        # Now check key in updated environment
+        key = os.getenv(f"{provider.upper()}_API_KEY")
+        if not key:
+            key_q = inquirer.Text(
+                'key',
+                message=f"Enter {provider} API key:"
+            )
+            key_answers = inquirer.prompt([key_q])
+            # Update .env
+            update_env_variable(f"{provider.upper()}_API_KEY", key_answers['key'])
+
+        # Model selection
+        models = PROVIDERS[provider]['models']
+        if not model:
+            model_q = inquirer.List(
+                'model',
+                message=f"Select {provider} model:",
+                choices=models
+            )
+            model = inquirer.prompt([model_q])['model']
+        
+        # Update config
+        manager = ModelManager()
+        update_env_variable('API_MODEL', model)
+        manager.switch_mode('api', model_name=model)
+        click.echo(f"✅ Switched to API mode using {provider}/{model}")
+        
+    else:
+        current_mode = manager.config['mode']
+        click.echo(f"Current mode: {current_mode}")
+        if current_mode == 'local':
+            click.echo(f"Local model: {manager.config['local']['model']}")
+        else:
+            provider = os.getenv('ACTIVE_API_PROVIDER', 'groq')
+            click.echo(f"API Provider: {provider}")
 
 @cli.command()
 @click.option('--mode', type=click.Choice(['local', 'api']))
-@click.option('--model', help="Specify model name when switching to local")
-def config(mode, model):
+@click.option('--provider', type=click.Choice(list(PROVIDERS.keys())))
+@click.option('--model', help="Specify model name")
+def config(mode, provider, model):
     """Configure operation mode and models"""
-    from inquirer import prompt, List  # Explicit import
     manager = ModelManager()
     
-    if mode:
-        if mode == 'local':
-            if model:
-                manager.switch_mode('local', model_name=model)
-            else:
-                models = manager.list_local_models()
-                if not models:
-                    click.echo("No local models found! Run 'shellsage setup' first")
-                    return
-                    
-                question = [
-                    List('model',
-                        message="Select local model:",
-                        choices=models,
-                        default=manager.config['local']['model']
-                    )
-                ]
-                answers = prompt(question)
-                manager.switch_mode('local', model_name=answers['model'])
-                
-        elif mode == 'api':
-            manager.switch_mode('api')
+    if mode == 'local':
+        models = manager.get_ollama_models()
+        question = [
+            inquirer.List('model',
+                message="Select local model:",
+                choices=models,
+                default=os.getenv('LOCAL_MODEL')
+            )
+        ]
+        answers = inquirer.prompt(question)
+        update_env_variable('LOCAL_MODEL', answers['model'])
+        update_env_variable('MODE', 'local')
+        click.echo(f"✅ Switched to local mode using {answers['model']}")
             
-        click.echo(f"Switched to {mode} mode")
-    else:
-        click.echo(f"Current mode: {manager.config['mode']}")
-        if manager.config['mode'] == 'local':
-            click.echo(f"Active model: {manager.config['local']['model']}")
+    elif mode == 'api':
+        if not provider:
+            # Interactive provider selection
+            provider_q = inquirer.List(
+                'provider',
+                message="Select API Provider:",
+                choices=list(PROVIDERS.keys())
+            )
+            provider = inquirer.prompt([provider_q])['provider']
+        
+        # Update provider FIRST before checking key
+        update_env_variable('ACTIVE_API_PROVIDER', provider)
+        load_dotenv(override=True)
+        
+        # Now check key in updated environment
+        key = os.getenv(f"{provider.upper()}_API_KEY")
+        if not key:
+            key_q = inquirer.Text(
+                'key',
+                message=f"Enter {provider} API key:"
+            )
+            key_answers = inquirer.prompt([key_q])
+            # Update .env
+            update_env_variable(f"{provider.upper()}_API_KEY", key_answers['key'])
 
+        # Model selection
+        models = PROVIDERS[provider]['models']
+        if not model:
+            model_q = inquirer.List(
+                'model',
+                message=f"Select {provider} model:",
+                choices=models
+            )
+            model = inquirer.prompt([model_q])['model']
+        
+        # Update config
+        manager.switch_mode('api', model_name=model)
+        click.echo(f"✅ Switched to API mode using {provider}/{model}")
+        
+    else:
+        current_mode = manager.config['mode']
+        click.echo(f"Current mode: {current_mode}")
+        if current_mode == 'local':
+            click.echo(f"Local model: {manager.config['local']['model']}")
+        else:
+            provider = os.getenv('ACTIVE_API_PROVIDER', 'groq')
+            click.echo(f"API Provider: {provider}")
 
 @cli.command()
 @click.option('--provider', type=click.Choice(['ollama', 'huggingface']))
