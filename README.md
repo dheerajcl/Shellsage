@@ -109,8 +109,8 @@ shellsage setup
 ? Enter Groq API key: [hidden input]
 
 ? Select Groq model:
-  ▸ mixtral-8x7b-32768 
-    llama3-70b-8192
+  ▸ mixtral-8x7b-32768       
+    llama3-70b-8192         # It isn't necessary to select models from the shown list, you can add any model of your choice supported by your provider in your .env `API_MODEL=`
 
 ✅ API configuration updated!
 

@@ -23,17 +23,17 @@ PROVIDERS = {
     },
     'anthropic': {
         'client': Anthropic,
-        'models': ['claude-3-opus-20240229', 'claude-3-sonnet-20240229']
+        'models': ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229']
     },
     'fireworks': {
         'client': OpenAI,
         'base_url': 'https://api.fireworks.ai/inference/v1',
-        'models': ['accounts/fireworks/models/llama-v2-70b-chat']
+        'models': ['accounts/fireworks/models/llama-v3p1-405b-instruct', 'accounts/fireworks/models/deepseek-v3', 'accounts/fireworks/models/llama-v3p1-8b-instruct', 'accounts/fireworks/models/llama-v3p3-70b-instruct']
     },
     'openrouter': {
         'client': OpenAI,
         'base_url': 'https://openrouter.ai/api/v1',
-        'models': ['google/palm-2', 'meta-llama/llama-3-70b-instruct']
+        'models': ['deepseek/deepseek-r1-distill-llama-70b:free', 'deepseek/deepseek-r1-distill-qwen-32b', 'mistralai/mistral-small-24b-instruct-2501', 'openai/gpt-3.5-turbo-instruct', 'microsoft/phi-4']
     },
     'deepseek': {
         'client': OpenAI,
