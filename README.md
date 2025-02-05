@@ -22,6 +22,7 @@
 $ rm -rf /important-folder
 🔎 Analysis → 🛠️ Fix: `rm -rf ./important-folder`
 ```
+![Error Analysis](screenshots/01.png)
 
 ### Natural Language to Commands
 
@@ -30,11 +31,13 @@ $ rm -rf /important-folder
 $ shellsage ask "find large files over 1GB"
 # → find / -type f -size +1G -exec ls -lh {} \;
 ```
+![Command generation](screenshots/02.png)
 
 ### ⚡ Interactive Workflows
 - Confirm before executing generated commands
 - Step-by-step complex operations
 - Safety checks for destructive commands
+
 
 ### 🌐 Supported API Providers
 - Groq
@@ -133,6 +136,10 @@ shellsage config --mode local
     mistral:7b-instruct-v0.3
     phi3:mini-128k-instruct
 ```
+
+![interactive_flow1](screenshots/03.png)
+
+![interactive_flow2](screenshots/04.png)
 
 ---
 
