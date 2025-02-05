@@ -28,15 +28,21 @@ class CommandGenerator:
     
     RESPONSE FORMAT:
     🧠 Analysis: [1-line explanation]
-    🛠️ Command: `[single executable command]`
+    🛠️ Command: ```[executable command(s)]```
     📝 Details: [technical specifics]
     ⚠️ Warning: [if dangerous]
     
-    EXAMPLE RESPONSE:
-    🧠 Analysis: Package updates require root access
-    🛠️ Command: `sudo apt update && sudo apt upgrade -y`
-    📝 Details: Updates package lists and upgrades all installed packages
-    ⚠️ Warning: May interrupt running services
+    EXAMPLE MULTI-COMMAND RESPONSE:
+    🧠 Analysis: Set up new Git repository and push
+    🛠️ Command: ```
+    git init
+    git add .
+    git commit -m "Initial commit"
+    git remote add origin https://github.com/user/repo.git
+    git push -u origin main
+    ```
+    📝 Details: Full repository initialization and first push
+    ⚠️ Warning: Verify remote URL before pushing
     
     CURRENT CONTEXT:
     - OS: {context.get('os', 'Linux')}
@@ -51,7 +57,7 @@ class CommandGenerator:
         components = {
             'analysis': re.search(r'🧠 Analysis: (.+?)(?=🛠️ Command|⚠️ Warning|$)', cleaned),
             'warning': re.search(r'⚠️ Warning: (.+?)(?=🛠️ Command|📝 Details|$)', cleaned),
-            'command': re.search(r'🛠️ Command: `(.+?)`', cleaned),
+            'command': re.search(r'🛠️ Command: ```(.*?)```', cleaned, re.DOTALL),
             'details': re.search(r'📝 Details: (.+?)(?=⚠️ Warning|$)', cleaned)
         }
 

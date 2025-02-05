@@ -19,6 +19,8 @@ class DeepSeekLLMHandler:
 **Error Message**: {context['error_output']}
 **Working Directory**: {context['cwd']}
 **Exit Code**: {context['exit_code']}
+**Command History**: {context.get('history', [])}
+**Man Page Excerpt**: {context.get('man_excerpt', '')}
 
 **Required Format (NO MARKDOWN, STRICT LINES):**
 🔍 Root Cause: <1-line diagnosis>
@@ -48,4 +50,4 @@ class DeepSeekLLMHandler:
                      .replace("Fix:", "🛠️ Fix:")\
                      .replace("Technical Explanation:", "📚 Technical Explanation:")\
                      .replace("Potential Risks:", "⚠️ Potential Risks:")\
-                     .replace("Prevention Tip:", "🔒 Prevention Tip:")
+                     .replace("Prevention Tip:", "�� Prevention Tip:")

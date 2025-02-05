@@ -32,10 +32,12 @@ def run(command, analyze, exit_code):
 def ask(query, execute):
     """Generate and execute commands with safety checks"""
     generator = CommandGenerator()
+    interceptor = ErrorInterceptor()
     context = {
         'os': subprocess.run('uname -s', shell=True, capture_output=True, text=True).stdout.strip(),
         'cwd': os.getcwd(),
-        'git': os.path.exists('.git')
+        'git': os.path.exists('.git'),
+        'history': interceptor.command_history
     }
     
     results = generator.generate_commands(' '.join(query), context)
@@ -72,9 +74,9 @@ def install():
     hook = r"""
 shell_sage_prompt() {
     local EXIT=$?
-    [ $EXIT -eq 0 ] && return
-    local CMD=$(fc -ln -1 | sed 's/^[[:space:]]*//;s/\\/\\\\/g')
-    shellsage run --analyze "$CMD" --exit-code $EXIT
+    local CMD=$(fc -ln -1 | awk '{$1=$1}1' | sed 's/\\/\\\\/g')
+    [ $EXIT -ne 0 ] && shellsage run --analyze "$CMD" --exit-code $EXIT
+    history -s "$CMD"  # Force into session history
 }
 PROMPT_COMMAND="shell_sage_prompt"
 """
