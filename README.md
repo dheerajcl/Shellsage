@@ -142,6 +142,7 @@ Shell Sage is currently in **alpha development**.
 
 **Known Limitations**:
 - Limited Windows support
+- Compatibility issues with zsh, fish
 - Occasional false positives in error detection
 - API mode requires provider-specific key
 
