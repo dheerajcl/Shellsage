@@ -22,7 +22,7 @@
 $ rm -rf /important-folder
 🔎 Analysis → 🛠️ Fix: `rm -rf ./important-folder`
 ```
-![Error Analysis](screenshots/01.png)
+![Error Analysis](screenshots/01_up.png)
 
 ### Natural Language to Commands
 
