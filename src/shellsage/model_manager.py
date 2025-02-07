@@ -92,7 +92,8 @@ class ModelManager:
     def get_ollama_models(self):
         """List installed Ollama models"""
         try:
-            response = requests.get("http://localhost:11434/api/tags")
+            ollama_host = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+            response = requests.get(f"{ollama_host}/api/tags")
             return [m['name'] for m in response.json().get('models', [])]
         except requests.ConnectionError:
             return []
@@ -178,8 +179,9 @@ class ModelManager:
     def _ollama_generate(self, prompt):
         """Generate using Ollama API with streaming support"""
         try:
+            ollama_host = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
             response = requests.post(
-                "http://localhost:11434/api/generate",
+                f"{ollama_host}/api/generate",
                 json={
                     "model": self.local_model,
                     "prompt": prompt,
