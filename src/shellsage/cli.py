@@ -9,6 +9,7 @@ from .model_manager import ModelManager, PROVIDERS
 from .helpers import update_env_file, update_env_variable
 from dotenv import load_dotenv
 import re
+from .display import Color
 
 @click.group()
 def cli():
@@ -36,8 +37,18 @@ def ask(query, execute):
     generator = CommandGenerator()
     interceptor = ErrorInterceptor()
 
+    # Add distro detection at the top of the ask command
+    try:
+        with open('/etc/os-release') as f:
+            dist_info = {k.lower(): v.strip('"') for k,v in 
+                        [line.split('=') for line in f if '=' in line]}
+        dist_name = dist_info.get('pretty_name', 'Linux')
+    except FileNotFoundError:
+        import platform
+        dist_name = f"{platform.system()} {platform.release()}"
+
     context = {
-        # 'os': dist_name,
+        'os': dist_name,
         'cwd': os.getcwd(),
         'git': os.path.exists('.git'),
         'history': interceptor.command_history
@@ -45,7 +56,7 @@ def ask(query, execute):
     
     results = generator.generate_commands(' '.join(query), context)
     
-    click.echo("\n\033[94m=== COMMAND ANALYSIS ===\033[0m")
+    click.echo(f"\n{Color.wrap('=== COMMAND ANALYSIS ===', Color.INFO, Color.BOLD)}")
     
     # Display thinking process first if present
     thinking_items = [item for item in results if item['type'] == 'thinking']
@@ -59,7 +70,7 @@ def ask(query, execute):
     
     for item in results:
         if item['type'] == 'warning' and item['content']:
-            click.echo(f"\n\033[91m⚠️ WARNING: {item['content']}\033[0m")
+            click.echo(f"\n{Color.wrap('⚠️ WARNING:', Color.ERROR)} {item['content']}")
         elif item['type'] == 'analysis' and item['content']:
             click.echo(f"\n\033[96m🧠 ANALYSIS: {item['content']}\033[0m")
     
