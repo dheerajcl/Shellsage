@@ -137,17 +137,34 @@ class ErrorInterceptor:
         return re.sub(r'\x1B\[[0-?]*[ -/]*[@-~]', '', error_output).strip()
 
     def _show_analysis(self, solution, context):
-        """Display analysis with command context and full man page"""
-        components = {
-            'cause': re.search(r'🔍 Root Cause: (.+?)(?=\n🛠️|\n📚|\n⚠️|\n🔒|$)', solution, re.DOTALL),
-            'fix': re.search(r'🛠️ Fix: `(.+?)`', solution),
-            'explanation': re.search(r'📚 Technical Explanation: (.+?)(?=\n⚠️|\n🔒|$)', solution, re.DOTALL),
-            'risk': re.search(r'⚠️ Potential Risks: (.+?)(?=\n🔒|$)', solution, re.DOTALL),
-            'prevention': re.search(r'🔒 Prevention Tip: (.+?)(?=\n|$)', solution, re.DOTALL)
-        }
-
+        """Display analysis with thinking process"""
+        # Extract thinking blocks first
+        thoughts = []
+        remaining = solution
+        while '<think>' in remaining and '</think>' in remaining:
+            think_start = remaining.find('<think>') + len('<think>')
+            think_end = remaining.find('</think>')
+            if think_start > -1 and think_end > -1:
+                thoughts.append(remaining[think_start:think_end].strip())
+                remaining = remaining[think_end + len('</think>'):]
+        
         print("\n\033[94m=== ERROR ANALYSIS ===\033[0m")
         
+        # Display thinking process if any
+        if thoughts:
+            print("\n\033[95m=== THINKING PROCESS ===")
+            for i, thought in enumerate(thoughts, 1):
+                print(f"\n\033[95m💭 [{i}] {thought}\033[0m")
+        
+        # Rest of existing analysis display logic
+        components = {
+            'cause': re.search(r'🔍 Root Cause: (.+?)(?=\n🛠️|\n📚|\n⚠️|\n🔒|$)', remaining, re.DOTALL),
+            'fix': re.search(r'🛠️ Fix: (`{1,3}(.*?)`{1,3}|([^\n]+))', remaining, re.DOTALL),
+            'explanation': re.search(r'📚 Technical Explanation: (.+?)(?=\n⚠️|\n🔒|$)', remaining, re.DOTALL),
+            'risk': re.search(r'⚠️ Potential Risks: (.+?)(?=\n🔒|$)', remaining, re.DOTALL),
+            'prevention': re.search(r'🔒 Prevention Tip: (.+?)(?=\n|$)', remaining, re.DOTALL)
+        }
+
         # Show command history context
         if context['history']:
             print(f"\n\033[90m[Context] Recent Commands:")
@@ -188,15 +205,7 @@ class ErrorInterceptor:
             clean_cmd = clean_cmd.replace('filename', relevant_files[0])
             clean_cmd = clean_cmd.replace('file', relevant_files[0])
             
-        if click.confirm(f"\n\033[95m🚀 Run fix command: '{clean_cmd}'? (Y/n)\033[0m"):
-            subprocess.run(
-                clean_cmd,
-                shell=True,
-                check=False,
-                stdin=sys.stdin,
-                stdout=sys.stdout,
-                stderr=sys.stderr
-            )
+        print(f"\n\033[95m💡 Recommended fix command:\033[0m \033[92m{clean_cmd}\033[0m")
 
     def _get_native_error(self, command):
         """Get error output directly from command"""

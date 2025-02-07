@@ -26,30 +26,18 @@ def run(command, analyze, exit_code):
     else:
         interceptor.run_command(command)
 
+# cli.py - update the ask command
+
 @cli.command()
 @click.argument('query', nargs=-1, required=True)
-@click.option('--execute', is_flag=True, help='Execute commands with confirmation')
+@click.option('--execute', is_flag=True, help='Execute commands with safety checks')
 def ask(query, execute):
     """Generate and execute commands with safety checks"""
     generator = CommandGenerator()
     interceptor = ErrorInterceptor()
 
-    try:
-        with open('/etc/os-release') as f:
-            lines = f.readlines()
-            dist_info = {}
-            for line in lines:
-                key, value = line.strip().split('=')
-                dist_info[key] = value.strip('"')
-            dist_name = dist_info.get('NAME', 'Linux')
-            id_like = dist_info.get('ID_LIKE', '').strip()
-            if id_like:
-                dist_name += f" ({id_like})"
-    except FileNotFoundError:
-        dist_name = subprocess.run('uname -s', shell=True, capture_output=True, text=True).stdout.strip()
-
     context = {
-        'os': dist_name,
+        # 'os': dist_name,
         'cwd': os.getcwd(),
         'git': os.path.exists('.git'),
         'history': interceptor.command_history
@@ -58,18 +46,28 @@ def ask(query, execute):
     results = generator.generate_commands(' '.join(query), context)
     
     click.echo("\n\033[94m=== COMMAND ANALYSIS ===\033[0m")
+    
+    # Display thinking process first if present
+    thinking_items = [item for item in results if item['type'] == 'thinking']
+    if thinking_items:
+        click.echo("\n\033[95m=== THINKING PROCESS ===\033[0m")
+        for item in thinking_items:
+            click.echo(f"\n\033[95m💭 {item['content']}\033[0m")
+    
+    # Display other components
+    command_item = next((i for i in results if i['type'] == 'command' and i['content']), None)
+    
     for item in results:
         if item['type'] == 'warning' and item['content']:
             click.echo(f"\n\033[91m⚠️ WARNING: {item['content']}\033[0m")
         elif item['type'] == 'analysis' and item['content']:
             click.echo(f"\n\033[96m🧠 ANALYSIS: {item['content']}\033[0m")
     
-    command_item = next((i for i in results if i['type'] == 'command'), None)
-    
     if command_item and command_item['content']:
         click.echo(f"\n\033[92m🛠️ COMMAND: {command_item['content']}\033[0m")
-        if command_item['details']:
-            click.echo(f"\033[93m📝 DETAILS: {command_item['details']}\033[0m")
+        details_item = next((i for i in results if i['type'] == 'details'), None)
+        if details_item and details_item['content']:
+            click.echo(f"\033[93m📝 DETAILS: {details_item['content']}\033[0m")
         
         if execute:
             if click.confirm("\n\033[95m🚀 Execute this command? (Y/n)\033[0m"):

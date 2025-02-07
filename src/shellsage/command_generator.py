@@ -2,6 +2,7 @@ import os
 import re
 from .model_manager import ModelManager
 
+
 class CommandGenerator:
     def __init__(self):
         self.manager = ModelManager()
@@ -10,7 +11,26 @@ class CommandGenerator:
         try:
             prompt = self._build_prompt(query, context)
             response = self.manager.generate(prompt)
-            return self._parse_response(response)
+            
+            # Check if response contains thinking tokens
+            has_thinking = '<think>' in response and '</think>' in response
+            
+            if has_thinking:
+                thoughts = []
+                remaining_response = response
+                while '<think>' in remaining_response and '</think>' in remaining_response:
+                    think_start = remaining_response.find('<think>') + len('<think>')
+                    think_end = remaining_response.find('</think>')
+                    if think_start > -1 and think_end > -1:
+                        thought = remaining_response[think_start:think_end].strip()
+                        thoughts.append(thought)
+                        remaining_response = remaining_response[think_end + len('</think>'):]
+                
+                final_response = remaining_response.strip()
+                return self._format_thinking_response(thoughts, final_response)
+            else:
+                return self._parse_response(response)
+                
         except Exception as e:
             return [{
                 'type': 'warning',
@@ -22,59 +42,118 @@ class CommandGenerator:
             }]
 
     def _build_prompt(self, query, context):
-        return f"""SYSTEM: You are a Linux terminal expert. Generate exactly ONE command.
+        # Determine the primary context based on the query and environment
+        system_context = f"""SYSTEM: You are a Linux terminal expert. Generate exactly ONE command or command sequence.
+Primary focus is on system-level operations (package management, system updates, file operations).
+Only consider Git operations if the query explicitly mentions Git/repository operations.
     
-    USER QUERY: {query}
+USER QUERY: {query}
     
-    RESPONSE FORMAT:
-    🧠 Analysis: [1-line explanation]
-    🛠️ Command: ```[executable command(s)]```
-    📝 Details: [technical specifics]
-    ⚠️ Warning: [if dangerous]
-    
-    EXAMPLE MULTI-COMMAND RESPONSE:
-    🧠 Analysis: Set up new Git repository and push
-    🛠️ Command: ```
-    git init
-    git add .
-    git commit -m "Initial commit"
-    git remote add origin https://github.com/user/repo.git
-    git push -u origin main
-    ```
-    📝 Details: Full repository initialization and first push
-    ⚠️ Warning: Verify remote URL before pushing
-    
-    CURRENT CONTEXT:
-    - OS: {context.get('os', 'Linux')}
-    - Directory: {context.get('cwd', 'Unknown')}
-    - Git repo: {'Yes' if context.get('git') else 'No'}"""
+RESPONSE FORMAT:
+🧠 Analysis: [1-line explanation]
+🛠️ Command: ```[executable command(s)]```
+📝 Details: [technical specifics]
+⚠️ Warning: [if dangerous]
 
+CURRENT CONTEXT:
+- OS: {context.get('os', 'Linux')}
+- Directory: {context.get('cwd', 'Unknown')}
+{f'- Git repo: Yes (only relevant for Git-specific queries)' if context.get('git') else ''}
+
+PRIORITY ORDER:
+1. System-level operations (apt, dnf, pacman, etc.)
+2. File system operations
+3. Repository operations (only if explicitly requested)
+
+EXAMPLES:
+Query: "update packages"
+🧠 Analysis: Update system packages using the appropriate package manager
+🛠️ Command: ```sudo apt update && sudo apt upgrade -y```
+📝 Details: Updates package lists and upgrades all installed packages
+⚠️ Warning: System may require restart after certain updates
+
+Query: "update git repo"
+🧠 Analysis: Update local Git repository with remote changes
+🛠️ Command: ```git pull origin main```
+📝 Details: Fetches and merges changes from the remote repository
+⚠️ Warning: Ensure working directory is clean before updating
+"""
+        return system_context
+
+    
+    def _format_thinking_response(self, thoughts, final_response):
+        results = []
+        
+        # Add thinking process to results
+        for thought in thoughts:
+            results.append({
+                'type': 'thinking',
+                'content': thought
+            })
+        
+        # Parse the final response
+        components = self._parse_response(final_response)
+        
+        # Clean up any duplicate sections caused by thinking process
+        seen_types = set()
+        cleaned_components = []
+        
+        for comp in components:
+            if comp['type'] not in seen_types and comp['content']:
+                seen_types.add(comp['type'])
+                # Remove any duplicate content within the same component
+                if isinstance(comp['content'], str):
+                    comp['content'] = '\n'.join(dict.fromkeys(comp['content'].split('\n')))
+                cleaned_components.append(comp)
+        
+        results.extend(cleaned_components)
+        return results
+    
+    
     def _parse_response(self, response):
-    # Handle JSON artifacts from streaming
-        cleaned = response.replace('\n', ' ').replace('  ', ' ')
-
-        # More robust pattern matching
+        # Clean up response by removing any remaining XML-like tags
+        cleaned = re.sub(r'<[^>]+>', '', response)
+        
         components = {
-            'analysis': re.search(r'🧠 Analysis: (.+?)(?=🛠️ Command|⚠️ Warning|$)', cleaned),
-            'warning': re.search(r'⚠️ Warning: (.+?)(?=🛠️ Command|📝 Details|$)', cleaned),
-            'command': re.search(r'🛠️ Command: ```(.*?)```', cleaned, re.DOTALL),
-            'details': re.search(r'📝 Details: (.+?)(?=⚠️ Warning|$)', cleaned)
+            'analysis': None,
+            'command': None,
+            'details': None,
+            'warning': None
         }
-
-        # Fallback pattern for malformed responses
-        if not components['command']:
-            command_match = re.search(r'(sudo [\w-]+|apt|dnf|brew|yum|pacman) [\w &|$-]+', cleaned)
-            if command_match:
-                components['command'] = command_match
-
+        
+        markers = {
+            'analysis': ['🧠', 'Analysis:'],
+            'command': ['🛠️', 'Command:'],
+            'details': ['📝', 'Details:'],
+            'warning': ['⚠️', 'Warning:']
+        }
+        
+        lines = cleaned.split('\n')
+        current_section = None
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            for section, section_markers in markers.items():
+                if any(marker in line for marker in section_markers):
+                    current_section = section
+                    for marker in section_markers:
+                        line = line.replace(marker, '').strip()
+                    components[section] = line
+                    break
+            
+            if current_section and not any(
+                marker in line for markers_list in markers.values() 
+                for marker in markers_list
+            ):
+                if components[current_section]:
+                    components[current_section] += '\n' + line
+                else:
+                    components[current_section] = line
+        
         return [{
-            'type': 'analysis',
-            'content': components['analysis'].group(1).strip() if components['analysis'] else None
-        }, {
-            'type': 'warning', 
-            'content': components['warning'].group(1).strip() if components['warning'] else None
-        }, {
-            'type': 'command',
-            'content': components['command'].group(1).strip() if components['command'] else None,
-            'details': components['details'].group(1).strip() if components['details'] else None
-        }]
+            'type': key,
+            'content': value.strip() if value else None
+        } for key, value in components.items()]

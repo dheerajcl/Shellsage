@@ -176,22 +176,31 @@ class ModelManager:
             return self._ollama_generate(prompt)
         return self._hf_generate(prompt)
 
+    # model_manager.py
+
     def _ollama_generate(self, prompt):
-        """Generate using Ollama API with streaming support"""
         try:
             ollama_host = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+            # Detect if it's a reasoning model based on model name
+            is_reasoning_model = any(x in self.local_model.lower() for x in ['deepseek', 'r1', 'think', 'expert'])
+
+            options = {
+                "temperature": 0.1,
+                "num_predict": 200048
+            }
+
+            # Only set stop tokens for non-reasoning models
+            if not is_reasoning_model:
+                options["stop"] = ["\n\n\n", "USER QUERY:"]
+
             response = requests.post(
                 f"{ollama_host}/api/generate",
                 json={
                     "model": self.local_model,
                     "prompt": prompt,
-                    "stream": False,  # Force non-streaming
-                    "options": {
-                        "temperature": 0.1,
-                        "stop": ["\n\n"]  # Prevent endless generation
-                    }
-                },
-                # timeout=30  # Add timeout
+                    "stream": False,
+                    "options": options
+                }
             )
             response.raise_for_status()
             return response.json()['response']

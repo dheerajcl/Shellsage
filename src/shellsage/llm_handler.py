@@ -1,4 +1,5 @@
 import os
+import re
 from .model_manager import ModelManager
 
 class DeepSeekLLMHandler:
@@ -37,17 +38,32 @@ class DeepSeekLLMHandler:
 🔒 Prevention Tip: Use tab-completion for command names"""
 
     def _format_response(self, raw):
-        # Handle different numbering formats
-        cleaned = raw.replace("1. ", "")\
-                    .replace("2. ", "")\
-                    .replace("3. ", "")\
-                    .replace("4. ", "")\
-                    .replace("5. ", "")\
-                    .replace("**", "")
+        # Detect reasoning model response
+        is_reasoning_model = any(x in self.manager.local_model.lower() 
+                               for x in ['deepseek', 'r1', 'think', 'expert'])
+        
+        if is_reasoning_model and '</think>' in raw:
+            # Extract all thinking blocks and final response
+            thoughts = []
+            remaining = raw
+            while '<think>' in remaining and '</think>' in remaining:
+                think_start = remaining.find('<think>') + len('<think>')
+                think_end = remaining.find('</think>')
+                if think_start > -1 and think_end > -1:
+                    thoughts.append(remaining[think_start:think_end].strip())
+                    remaining = remaining[think_end + len('</think>'):]
+            raw = remaining.strip()
 
-        # Ensure proper headers
-        return cleaned.replace("Root Cause:", "🔍 Root Cause:")\
-                     .replace("Fix:", "🛠️ Fix:")\
-                     .replace("Technical Explanation:", "📚 Technical Explanation:")\
-                     .replace("Potential Risks:", "⚠️ Potential Risks:")\
-                     .replace("Prevention Tip:", "�� Prevention Tip:")
+        # Existing cleaning logic
+        cleaned = re.sub(r'\n+', '\n', raw)
+        cleaned = re.sub(r'(\d\.\s|\*\*)', '', cleaned)
+        
+        return re.sub(
+            r'(Root Cause|Fix|Technical Explanation|Potential Risks|Prevention Tip):?',
+            lambda m: f"🔍 {m.group(1)}:" if m.group(1) == "Root Cause" else 
+                     f"🛠️ {m.group(1)}:" if m.group(1) == "Fix" else
+                     f"📚 {m.group(1)}:" if m.group(1) == "Technical Explanation" else
+                     f"⚠️ {m.group(1)}:" if m.group(1) == "Potential Risks" else
+                     f"🔒 {m.group(1)}:",
+            cleaned
+        )
