@@ -33,8 +33,23 @@ def ask(query, execute):
     """Generate and execute commands with safety checks"""
     generator = CommandGenerator()
     interceptor = ErrorInterceptor()
+
+    try:
+        with open('/etc/os-release') as f:
+            lines = f.readlines()
+            dist_info = {}
+            for line in lines:
+                key, value = line.strip().split('=')
+                dist_info[key] = value.strip('"')
+            dist_name = dist_info.get('NAME', 'Linux')
+            id_like = dist_info.get('ID_LIKE', '').strip()
+            if id_like:
+                dist_name += f" ({id_like})"
+    except FileNotFoundError:
+        dist_name = subprocess.run('uname -s', shell=True, capture_output=True, text=True).stdout.strip()
+
     context = {
-        'os': subprocess.run('uname -s', shell=True, capture_output=True, text=True).stdout.strip(),
+        'os': dist_name,
         'cwd': os.getcwd(),
         'git': os.path.exists('.git'),
         'history': interceptor.command_history
