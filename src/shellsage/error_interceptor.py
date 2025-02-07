@@ -10,15 +10,18 @@ from .llm_handler import DeepSeekLLMHandler
 class ErrorInterceptor:
     def __init__(self):
         self.llm_handler = DeepSeekLLMHandler()
-        self.command_history = deque(maxlen=10)  # Store last 10 commands
+        self.command_history = deque(maxlen=20)  # Increased history depth
         self.last_command = ""
+        self.context_cache = {}
 
     def run_command(self, command):
         """Execute command with error interception"""
         try:
             full_cmd = ' '.join(command)
             self.last_command = full_cmd
-            self.command_history.append(full_cmd)
+            # Maintain full session history while respecting maxlen
+            if full_cmd != self.command_history[-1] if self.command_history else True:
+                self.command_history.append(full_cmd)
             
             # Execute with live terminal interaction
             result = subprocess.run(
@@ -31,7 +34,8 @@ class ErrorInterceptor:
             )
             
             if result.returncode != 0:
-                self._handle_error(result)
+                self.context_cache = self._get_additional_context()  # Cache context
+                self._handle_error(result, self.context_cache)
             
             sys.exit(result.returncode)
             
@@ -49,9 +53,9 @@ class ErrorInterceptor:
             stdout='',
             stderr=self._get_native_error(command)
         )
-        self._handle_error(result)
+        self._handle_error(result, self.context_cache)
 
-    def _handle_error(self, result):
+    def _handle_error(self, result, context):
         """Process and analyze command errors"""
         # Get relevant files from command history
         relevant_files = self._get_relevant_files_from_history()
@@ -63,7 +67,7 @@ class ErrorInterceptor:
             'exit_code': result.returncode,
             'history': list(self.command_history),
             'relevant_files': relevant_files,
-            **self._get_additional_context()
+            **context
         }
 
         # Enhanced context for file operations
@@ -154,7 +158,7 @@ class ErrorInterceptor:
         if thoughts:
             print("\n\033[95m=== THINKING PROCESS ===")
             for i, thought in enumerate(thoughts, 1):
-                print(f"\n\033[95m💭 [{i}] {thought}\033[0m")
+                print(f"\n\033[95m[{i}] {thought}\033[0m")
         
         # Rest of existing analysis display logic
         components = {
@@ -221,26 +225,78 @@ class ErrorInterceptor:
             return "Command execution failed"
 
     def _get_additional_context(self):
-        """Gather additional context for error analysis"""
-        context = {}
+        """Enhanced context gathering without tmux"""
+        context = {
+            'env_vars': self._get_relevant_env_vars(),
+            'process_tree': self._get_process_tree(),
+            'file_context': self._get_file_context(),
+            'network_state': self._get_network_state()
+        }
         
-        # Git context
+        # Add existing git context
         if self.last_command.startswith('git '):
-            try:
-                git_status = subprocess.run(
-                    'git status --porcelain',
-                    shell=True,
-                    capture_output=True,
-                    text=True
-                )
-                context['git_status'] = git_status.stdout
-                context['git_remotes'] = subprocess.run(
-                    'git remote -v',
-                    shell=True,
-                    capture_output=True,
-                    text=True
-                ).stdout
-            except:
-                pass
+            context.update(self._get_git_context())
             
         return context
+
+    def _get_relevant_env_vars(self):
+        return {
+            'PATH': os.getenv('PATH', ''),
+            'SHELL': os.getenv('SHELL', ''),
+            'USER': os.getenv('USER', ''),
+            'HOME': os.getenv('HOME', ''),
+            'PWD': os.getenv('PWD', ''),
+            'OLDPWD': os.getenv('OLDPWD', '')
+        }
+
+    def _get_process_tree(self):
+        try:
+            ps_output = subprocess.check_output(
+                ['ps', '-ef', '--forest'], 
+                stderr=subprocess.DEVNULL,
+                text=True
+            ).strip()
+            return ps_output.split('\n')[-10:]  # Last 10 processes
+        except Exception:
+            return []
+
+    def _get_file_context(self):
+        cwd = os.getcwd()
+        try:
+            return {
+                'files': [f for f in os.listdir(cwd) if os.path.isfile(f)][:10],
+                'dirs': [d for d in os.listdir(cwd) if os.path.isdir(d)][:5]
+            }
+        except Exception:
+            return {}
+
+    def _get_network_state(self):
+        try:
+            return subprocess.check_output(
+                ['ss', '-tulpn'],
+                stderr=subprocess.DEVNULL,
+                text=True
+            ).strip().split('\n')[:5]
+        except Exception:
+            return []
+
+    def _get_git_context(self):
+        try:
+            git_status = subprocess.run(
+                'git status --porcelain',
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+            git_remotes = subprocess.run(
+                'git remote -v',
+                shell=True,
+                capture_output=True,
+                text=True
+            ).stdout
+            return {
+                'git_status': git_status.stdout,
+                'git_remotes': git_remotes
+            }
+        except Exception:
+            return {}

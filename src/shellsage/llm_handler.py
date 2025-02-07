@@ -15,12 +15,16 @@ class DeepSeekLLMHandler:
             return f"Error: {str(e)}"
 
     def _build_prompt(self, context):
-        return f"""**[Terminal Error Diagnosis]**
+        return f"""**[Terminal Context Analysis]**
+**System Environment**: {context.get('env_vars', {}).get('SHELL')} on {context.get('os', 'Linux')}
+**Working Directory**: {context['cwd']} ({len(context.get('file_context', {}).get('files', []))} files)
+**Recent Processes**: {', '.join(context.get('process_tree', [])[-3:])}
+**Network State**: {context.get('network_state', ['Unknown'])[0]}
+**Command History**: {', '.join(context.get('history', [])[-5:])}
+
 **Failed Command**: {context['command']}
 **Error Message**: {context['error_output']}
-**Working Directory**: {context['cwd']}
 **Exit Code**: {context['exit_code']}
-**Command History**: {context.get('history', [])}
 **Man Page Excerpt**: {context.get('man_excerpt', '')}
 
 **Required Format (NO MARKDOWN, STRICT LINES):**
