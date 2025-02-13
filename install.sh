@@ -48,7 +48,7 @@ echo -e "${YELLOW}⚙️ Running initial configuration...${NC}"
 if [ -f .env ]; then
     shellsage setup
 else
-    echo -e "${RED}❌ Missing .env file - make sure to clone the repository properly${NC}"
+    echo -e "${RED}❌ Missing .env file - Rename .env.example to .env and populate required values${NC}"
     exit 1
 fi
 
