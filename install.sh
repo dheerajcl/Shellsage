@@ -53,16 +53,24 @@ shellsage setup
 
 # Install shell hook
 echo -e "${YELLOW}⚙️ Installing shell hook...${NC}"
-HOOK=$(shellsage install | sed -n '/^# Add this to your shell config:/,/^$/p' | sed '1d;$d')
+HOOK=$'shell_sage_prompt() {\n    local EXIT=$?\n    local CMD=$(fc -ln -1 | awk \'{$1=$1}1\' | sed \'s/\\\\/\\\\\\\\/g\')\n    [ $EXIT -ne 0 ] && shellsage run --analyze "$CMD" --exit-code $EXIT\n    history -s "$CMD"  # Force into session history\n}\nPROMPT_COMMAND="shell_sage_prompt"'
 
 if [ -f ~/.bashrc ]; then
-    echo "$HOOK" >> ~/.bashrc
+    echo -e "\n# Shell Sage Hook\n$HOOK" >> ~/.bashrc
     echo -e "${GREEN}✅ Added to ~/.bashrc${NC}"
+    # Refresh bash if we're in bash
+    if [ -n "$BASH" ]; then
+        source ~/.bashrc
+    fi
 fi
 
 if [ -f ~/.zshrc ]; then
-    echo "$HOOK" >> ~/.zshrc
+    echo -e "\n# Shell Sage Hook\n$HOOK" >> ~/.zshrc
     echo -e "${GREEN}✅ Added to ~/.zshrc${NC}"
+    # Refresh zsh if we're in zsh
+    if [ -n "$ZSH_VERSION" ]; then
+        source ~/.zshrc
+    fi
 fi
 
 echo -e "\n${GREEN}✅ Installation Complete!${NC}"
