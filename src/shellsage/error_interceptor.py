@@ -6,6 +6,14 @@ import yaml
 import click
 from collections import deque
 from .llm_handler import DeepSeekLLMHandler
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+from rich.syntax import Syntax
+from rich.columns import Columns
+from rich.rule import Rule
+from rich.markdown import Markdown
+from rich.console import Group
 
 class ErrorInterceptor:
     def __init__(self):
@@ -142,6 +150,8 @@ class ErrorInterceptor:
 
     def _show_analysis(self, solution, context):
         """Display analysis with thinking process"""
+        console = Console()
+
         # Extract thinking blocks first
         thoughts = []
         remaining = solution
@@ -152,15 +162,48 @@ class ErrorInterceptor:
                 thoughts.append(remaining[think_start:think_end].strip())
                 remaining = remaining[think_end + len('</think>'):]
         
-        print("\n\033[94m=== ERROR ANALYSIS ===\033[0m")
-        
+        console.print("\n[bold cyan]Error Analysis[/bold cyan]")
+    
         # Display thinking process if any
         if thoughts:
-            print("\n\033[95m=== THINKING PROCESS ===")
-            for i, thought in enumerate(thoughts, 1):
-                print(f"\n\033[95m[{i}] {thought}\033[0m")
+            console.print(Panel(
+                "\n".join(f"[dim]› {thought}[/dim]" for thought in thoughts),
+                title="[gold1]Cognitive Process[/]",
+                border_style="gold1",
+                padding=(0, 2)
+            ))
         
-        # Rest of existing analysis display logic
+        # Context information
+        context_content = []
+        if context['history']:
+            context_content.append(
+                Panel("\n".join(f"[dim]› {cmd}[/dim]" for cmd in context['history'][-3:]),
+                      title="[grey70]Recent Commands[/]",
+                      border_style="grey58")
+            )
+        
+        if context.get('relevant_files'):
+            context_content.append(
+                Panel("\n".join(f"[dim]› {file}[/dim]" for file in context['relevant_files']),
+                      title="[grey70]Related Files[/]",
+                      border_style="grey58")
+            )
+        
+        if context.get('man_excerpt') and "No manual entry" not in context['man_excerpt']:
+            context_content.append(
+                Panel(
+                    Syntax(context['man_excerpt'], "man", theme="ansi_light", line_numbers=False),
+                    title="[bold medium_blue]📘 MANUAL REFERENCE[/]",
+                    border_style="bright_blue",
+                    padding=(0, 1),
+                    # subtitle=f"for {os.path.basename(context['command'].split()[0])}"
+                )
+            )
+        
+        if context_content:
+            console.print(Columns(context_content, equal=True, expand=False))
+        
+        # Error Components
         components = {
             'cause': re.search(r'🔍 Root Cause: (.+?)(?=\n🛠️|\n📚|\n⚠️|\n🔒|$)', remaining, re.DOTALL),
             'fix': re.search(r'🛠️ Fix: (`{1,3}(.*?)`{1,3}|([^\n]+))', remaining, re.DOTALL),
@@ -168,32 +211,48 @@ class ErrorInterceptor:
             'risk': re.search(r'⚠️ Potential Risks: (.+?)(?=\n🔒|$)', remaining, re.DOTALL),
             'prevention': re.search(r'🔒 Prevention Tip: (.+?)(?=\n|$)', remaining, re.DOTALL)
         }
-
-        # Show command history context
-        if context['history']:
-            print(f"\n\033[90m[Context] Recent Commands:")
-            for cmd in context['history'][-3:]:
-                print(f"  {cmd}\033[0m")
+    
+        # Main Analysis Content
+        analysis_blocks = []
+        if components['cause']:
+            analysis_blocks.append(Markdown(f"**Root Cause**\n{components['cause'].group(1)}"))
+        if components['explanation']:
+            analysis_blocks.append(Markdown(f"**Technical Explanation**\n{components['explanation'].group(1)}"))
         
-        # Show relevant files from history if any
-        if context.get('relevant_files'):
-            print(f"\n\033[90m[Context] Recently Used Files:")
-            for file in context['relevant_files']:
-                print(f"  {file}\033[0m")
-
-        # Show analysis components
-        self._print_component(components['cause'], '\033[91m', "ROOT CAUSE")
-        self._print_component(components['explanation'], '\033[93m', "TECHNICAL DETAILS")
-        self._print_component(components['risk'], '\033[33m', "POTENTIAL RISKS")
-
-        # Show complete man page excerpt
-        if context.get('man_excerpt'):
-            print(f"\n\033[90m[Manual Excerpt]")
-            print(f"{context['man_excerpt']}\033[0m")
-
+        if analysis_blocks:
+            console.print(Panel(
+                Group(*analysis_blocks),
+                title="[cyan]Diagnosis[/]",
+                border_style="cyan",
+                padding=(0, 2)
+            ))
+        
+        # Recommended Fix
         if components['fix']:
-            self._prompt_fix(components['fix'].group(1), context['relevant_files'])
-
+            fix_command = components['fix'].group(1).strip('`')
+            console.print(Panel(
+                Syntax(fix_command, "bash", theme="ansi_light", line_numbers=False),
+                title="[bold bright_green]⚡ RECOMMENDED FIX[/]",
+                border_style="bright_green",
+                padding=(1, 2),
+                # subtitle="Copy-paste ready solution"
+            ))
+        
+        # Additional Information
+        info_blocks = []
+        if components['risk']:
+            info_blocks.append(Markdown(f"**Potential Risks**\n{components['risk'].group(1)}"))
+        if components['prevention']:
+            info_blocks.append(Markdown(f"**Prevention Tip**\n{components['prevention'].group(1)}"))
+        
+        if info_blocks:
+            console.print(Panel(
+                Group(*info_blocks),
+                title="[yellow]Additional Information[/]",
+                border_style="yellow",
+                padding=(0, 2)
+            ))
+    
     def _print_component(self, match, color, label):
         """Enhanced component display"""
         if match:

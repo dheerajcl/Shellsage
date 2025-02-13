@@ -9,6 +9,11 @@ from .model_manager import ModelManager, PROVIDERS
 from .helpers import update_env_file, update_env_variable
 from dotenv import load_dotenv
 import re
+from rich.console import Console
+from rich.panel import Panel
+from rich.markdown import Markdown
+from rich.syntax import Syntax
+from rich.columns import Columns
 
 @click.group()
 def cli():
@@ -33,6 +38,7 @@ def run(command, analyze, exit_code):
 @click.option('--execute', is_flag=True, help='Execute commands with safety checks')
 def ask(query, execute):
     """Generate and execute commands with safety checks"""
+    console = Console()
     generator = CommandGenerator()
     interceptor = ErrorInterceptor()
 
@@ -55,41 +61,54 @@ def ask(query, execute):
     
     results = generator.generate_commands(' '.join(query), context)
     
-    click.echo("\n\033[94m=== COMMAND ANALYSIS ===\033[0m")
+    # Command Analysis Display
+    console.print(Panel.fit("[bold cyan]COMMAND ANALYSIS[/]", style="cyan"))
     
-    # Display thinking process first if present
+    # Thinking Process
     thinking_items = [item for item in results if item['type'] == 'thinking']
     if thinking_items:
-        click.echo("\n\033[95m=== THINKING PROCESS ===\033[0m")
-        for item in thinking_items:
-            click.echo(f"\n\033[95m💭 {item['content']}\033[0m")
+        console.print(Panel.fit(
+            "\n".join(f"[dim]› {item['content']}[/dim]" for item in thinking_items),
+            title="[gold1]Thinking Process[/]",
+            border_style="gold1",
+            padding=(0, 2)
+        ))
     
-    # Display other components
-    command_item = next((i for i in results if i['type'] == 'command' and i['content']), None)
+    # Main Results
+    command_item = next((i for i in results if i['type'] == 'command'), None)
+    
+    analysis_col = []
+    details_col = []
     
     for item in results:
-        if item['type'] == 'warning' and item['content']:
-            click.echo(f"\n\033[91m⚠️ WARNING: {item['content']}\033[0m")
-        elif item['type'] == 'analysis' and item['content']:
-            click.echo(f"\n\033[96m🧠 ANALYSIS: {item['content']}\033[0m")
+        if item['type'] == 'warning':
+            analysis_col.append(f"[red]⚠ {item['content']}[/]")
+        elif item['type'] == 'analysis':
+            analysis_col.append(f"[cyan]ⓘ {item['content']}[/]")
+        elif item['type'] == 'details':
+            details_col.append(f"[dim]{item['content']}[/]")
+    
+    console.print(Columns([
+        Panel.fit("\n".join(analysis_col), title="[blue]Analysis[/]", padding=(0, 1)),
+        Panel.fit("\n".join(details_col), title="[grey70]Technical Details[/]", padding=(0, 1))
+    ], equal=True, expand=False))
     
     if command_item and command_item['content']:
-        click.echo(f"\n\033[92m🛠️ COMMAND: {command_item['content']}\033[0m")
-        details_item = next((i for i in results if i['type'] == 'details'), None)
-        if details_item and details_item['content']:
-            click.echo(f"\033[93m📝 DETAILS: {details_item['content']}\033[0m")
+        console.print(Panel.fit(
+            Syntax(command_item['content'], "bash", theme="monokai", line_numbers=False),
+            title="[green]Generated Command[/]",
+            border_style="green",
+            padding=0
+        ))
         
         if execute:
-            if click.confirm("\n\033[95m🚀 Execute this command? (Y/n)\033[0m"):
-                subprocess.run(
-                    command_item['content'],
-                    shell=True,
-                    stdin=sys.stdin,
-                    stdout=sys.stdout,
-                    stderr=sys.stderr
-                )
+            if console.input("\n[bold gold1]› Execute command?[/] [[y]/n]: ").lower() != 'n':
+                subprocess.run(command_item['content'], shell=True)
     else:
-        click.echo("\n\033[91mNo valid command generated\033[0m")
+        console.print(Panel.fit(
+            "No valid command generated",
+            style="red"
+        ))
 
 @cli.command()
 def install():
