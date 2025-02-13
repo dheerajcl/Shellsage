@@ -33,7 +33,7 @@ PROVIDERS = {
     'openrouter': {
         'client': OpenAI,
         'base_url': 'https://openrouter.ai/api/v1',
-        'models': ['deepseek/deepseek-r1-distill-llama-70b:free', 'deepseek/deepseek-r1-distill-qwen-32b', 'mistralai/mistral-small-24b-instruct-2501', 'openai/gpt-3.5-turbo-instruct', 'microsoft/phi-4']
+        'models': ['deepseek/deepseek-r1-distill-llama-70b:free', 'deepseek/deepseek-r1-distill-qwen-32b', 'mistralai/mistral-small-24b-instruct-2501', 'openai/gpt-3.5-turbo-instruct', 'microsoft/phi-4', 'google/gemini-2.0-flash-thinking-exp:free', 'google/gemini-2.0-pro-exp-02-05:free', 'deepseek/deepseek-r1:free', 'qwen/qwen-vl-plus:free']
     },
     'deepseek': {
         'client': OpenAI,
