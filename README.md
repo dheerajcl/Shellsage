@@ -83,7 +83,22 @@ shellsage config --mode api --provider groq
 - Local models need 4GB+ RAM (llama3:8b) to 16GB+ (llama3:70b)
 - Response quality depends on selected model capabilities
 
+
+### Custom Model Selection
+
+While we provide common defaults for each AI provider, many services offer hundreds of models. To use a specific model:
+
+- Check your provider's documentation for available models
+- Set in .env:
+```
+API_PROVIDER=openrouter
+API_MODEL=your-model-name-here  # e.g. google/gemini-2.0-pro-exp-02-05:free
+
+```
+
 ---
+
+
 
 ## Configuration
 
@@ -157,9 +172,9 @@ Shell Sage is currently in **alpha development**.
 - [x] Local LLM support
 - [x] Hybrid cloud(api)/local mode switching
 - [x] Model configuration wizard
-- [ ] Plugin system
+- [ ] Better Context Aware
 - [ ] Windows PowerShell integration
-- [ ] Local model quantization
+- [ ] Tmux Integration
 - [ ] CI/CD error pattern database
 
 ---
