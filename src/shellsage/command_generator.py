@@ -155,5 +155,5 @@ Query: "update git repo"
         
         return [{
             'type': key,
-            'content': value.strip() if value else None
+            'content': '\n'.join(dict.fromkeys(value.strip().split('\n'))) if value else None
         } for key, value in components.items()]

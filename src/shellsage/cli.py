@@ -94,8 +94,10 @@ def ask(query, execute):
     ], equal=True, expand=False))
     
     if command_item and command_item['content']:
+        # Clean markdown backticks before display
+        clean_command = command_item['content'].strip('`').strip()
         console.print(Panel.fit(
-            Syntax(command_item['content'], "bash", theme="monokai", line_numbers=False),
+            Syntax(clean_command, "bash", theme="monokai", line_numbers=False),
             title="[green]Generated Command[/]",
             border_style="green",
             padding=0
